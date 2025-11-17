@@ -1,0 +1,6 @@
+gspread
+google-auth
+selenium
+webdriver-manager
+gspread-formatting
+pandas
