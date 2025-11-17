@@ -2,30 +2,31 @@ name: Noon Scraper -> Google Sheets
 
 on:
   schedule:
-    - cron: '*/30 * * * *'   # every 30 minutes
-  workflow_dispatch: {}      # allow manual trigger
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
 
 jobs:
   run-scraper:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Install requirements
         run: pip install -r requirements.txt
 
-      - name: Create service account file from secret
+      - name: Create service account file
         env:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
           echo "$GCP_SA_KEY" > service-account.json
           chmod 600 service-account.json
 
-      - name: Run scraper (single pass)
+      - name: Run scraper
         run: python scraper.py
