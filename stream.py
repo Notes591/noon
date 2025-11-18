@@ -51,7 +51,6 @@ def load_sheet():
     data = ws.get_all_values()
     df = pd.DataFrame(data[1:], columns=data[0])
 
-	# إصلاح أسماء الأعمدة
     df.columns = (
         df.columns
         .str.strip()
@@ -88,7 +87,6 @@ def load_history():
 
     df = pd.DataFrame(data[1:], columns=data[0])
 
-	# تنظيف الأعمدة
     df.columns = (
         df.columns
         .str.strip()
@@ -153,19 +151,18 @@ last_update_placeholder = st.sidebar.empty()
 
 
 # ====================================================================
-# 6) عرض البيانات
+# 6) عرض البيانات + الكارت الحديث
 # ====================================================================
 while True:
     try:
         df = load_sheet()
         df_hist = load_history()
 
-		# البحث
         if search_text:
             df = df[df.apply(lambda r: r.astype(str).str.contains(search_text, case=False).any(), axis=1)]
 
         with placeholder.container():
-            st.subheader("🟦 عرض المنتجات – Cards View")
+            st.subheader("🟦 عرض المنتجات – Modern Compact Cards")
 
             for idx, row in df.iterrows():
 
@@ -182,79 +179,101 @@ while True:
                     ("المنافس 5", "SKU6", "Price6", "Nudge6"),
                 ]
 
+
+                # ============== الكارت الجديد ==============
                 html = f"""
                 <div style="
-                    border:1px solid #e3e3e3;
-                    padding:15px;
-                    border-radius:10px;
-                    margin-bottom:18px;
-                    background:#ffffff;
-                    direction:rtl;
-                    width:90%;
-                    box-shadow:0 1px 4px rgba(0,0,0,0.05);
+                    border: 1px solid #dcdcdc;
+                    padding: 12px;
+                    border-radius: 12px;
+                    margin-bottom: 15px;
+                    background: #ffffff;
+                    direction: rtl;
+                    width: 60%;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+                    font-family: 'Arial';
                 ">
-                    <h2 style="font-size:20px; margin-bottom:10px; color:#333;">
-                        📦 <b>SKU الأساسي:</b>
-                        <span style="color:#007bff;">{sku_main}</span>
-                    </h2>
 
-                    <h3 style="font-size:16px; margin:5px 0 12px 0; color:#555;">
-                        🏷️ <b>الأسعار + آخر تغيير + النودجز:</b>
-                    </h3>
+                    <div style="
+                        font-size: 17px;
+                        font-weight: bold;
+                        color: #1a73e8;
+                        margin-bottom: 8px;
+                    ">
+                        📦 SKU الأساسي:
+                        <span style="color:#000; font-weight:bold;">{sku_main}</span>
+                    </div>
 
-                    <ul style="font-size:15px; line-height:1.6; list-style:none; padding:0; margin:0;">
+                    <div style="
+                        font-size: 14px;
+                        font-weight: bold;
+                        margin-bottom: 10px;
+                        color: #444;
+                    ">
+                        🏷️ الأسعار + آخر تحديث + النودجز
+                    </div>
+
+                    <div>
                 """
 
+                # LOOP المنافسين + منتجك
                 for label, sku_col, price_col, nudge_col in sku_list:
 
-                    sku_val = row.get(sku_col, "")
-                    price_val = row.get(price_col, "")
+                    sku_val = clean_sku_text(row.get(sku_col, ""))
+                    price_val = row.get(price_col, "-")
                     raw_nudge = row.get(nudge_col, "-")
-
-                    sku_val = clean_sku_text(sku_val)
 
                     if raw_nudge and raw_nudge != "-":
                         nudge_show = " | ".join([n.strip() for n in raw_nudge.split("|") if n.strip()])
                     else:
                         nudge_show = "-"
 
+                    # منتجك لون خاص
                     if sku_col == "SKU1":
                         change_html = ""
+                        box_color = "#e8f0fe"
                     else:
                         change = get_last_change(df_hist, sku_val)
+                        box_color = "#f7f7f7"
+
                         if change:
                             change_html = f"""
-                            <div style="font-size:13px; margin-top:3px;">
-                                🔄 <b>آخر تغيير:</b> {change['old']} → {change['new']}
-                                <br>📅 <b>الوقت:</b> {change['time']}
+                            <div style="font-size:12px; margin-top:3px; color:#555;">
+                                🔄 <b>{change['old']} → {change['new']}</b>
+                                <div style="margin-top:2px;">📅 {change['time']}</div>
                             </div>
                             """
                         else:
-                            change_html = "<div style='font-size:12px; color:#777;'>لا يوجد تغييرات مسجلة</div>"
+                            change_html = "<div style='font-size:12px; margin-top:3px; color:#777;'>لا يوجد تغييرات</div>"
 
                     html += f"""
-                        <li style="margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid #f0f0f0;">
-                            <div style="font-size:15px; font-weight:bold; color:#222;">
-                                {label} <span style="color:#888; font-weight:normal;">({sku_val})</span>
+                        <div style="
+                            background:{box_color};
+                            border-radius:8px;
+                            padding:10px;
+                            margin-bottom:8px;
+                            border:1px solid #e0e0e0;
+                        ">
+                            <div style="font-size:14px; font-weight:bold; color:#333;">
+                                {label} 
+                                <span style="color:#888; font-size:13px;">({sku_val})</span>
                             </div>
 
-                            <div style="margin-top:4px; font-size:15px;">
-                                💰 <b>السعر:</b>
-                                <span style="color:#2c3e50; font-weight:bold;">{price_val}</span>
+                            <div style="margin-top:4px; font-size:14px;">
+                                💰 <b>السعر:</b> {price_val}
                             </div>
 
-                            <div style="color:#666; margin-top:3px; font-size:14px;">
+                            <div style="margin-top:3px; font-size:13px; color:#555;">
                                 🔔 {nudge_show}
                             </div>
 
                             {change_html}
-                        </li>
+                        </div>
                     """
 
-                html += "</ul></div>"
+                html += "</div></div>"
 
-                # ============ عرض الكارت بدون Scroll + ارتفاع كبير ============
-                components.html(html, height=2500, scrolling=False)
+                components.html(html, height=900, scrolling=False)
 
         last_update_placeholder.markdown(
             f"🕒 آخر تحديث: **{time.strftime('%Y-%m-%d %H:%M:%S')}**"
