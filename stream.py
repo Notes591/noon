@@ -42,7 +42,11 @@ AAAA//uQZAAAAAABgIAAABAAAAAIAAAAAExBTUUzLjk1LjIAAAAAAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//uQZAAAAAAEwKAAAAgAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//uQZAAAAAAEwKAAAAgAAAAAAAAAAAAA
+EluZm8AAAAAAQAAAAMAAAADAAAAAwAAAAQAAAAEAAAABAAAAAUAAAAFAAAABgAAAAYAAAAH
+AAAABwAAAAgAAAAIAAAACQAAAAkAAAAKAAAACgAAAAsAAAALAAAADAAAAAwAAAANAAAADQAA
+AA4AAAAOAAAADwAAAA8AAAAQAAAAEAAAABEAAAARAAAAEgAAABIAAAATAAAAEwAAABQAAAAU
+AAAAFQAAABUAAAAXAAAAFwAAABgAAAAYAAAA
 """
 
 # ============================================================
@@ -155,7 +159,7 @@ def get_last_change(hist, sku):
     }
 
 # ============================================================
-# price → float
+# السعر → float
 # ============================================================
 def price_to_float(s):
     if not s:
@@ -192,13 +196,13 @@ while True:
         with placeholder.container():
 
             # ============================================================
-            # 🔔 آخر التغييرات – داخل Scroll
+            # 🔔 آخر التغييرات – إشعارات Notifications
             # ============================================================
-            st.subheader("🔔 آخر التغييرات (داخل Scroll)")
+            st.subheader("🔔 آخر التغييرات (Notifications)")
 
             if not hist.empty:
 
-                recent = hist.sort_values("DateTime", ascending=False).head(10).reset_index(drop=True)
+                recent = hist.sort_values("DateTime", ascending=False).head(5).reset_index(drop=True)
 
                 st.markdown("""
                 <div style="
@@ -233,26 +237,30 @@ while True:
                     st.markdown(f"""
                     <div onclick="localStorage.setItem('{cid}','1')"
                         style="
-                            background:#fff;
-                            border:2px solid #ccc;
+                            background:#ffffff;
+                            border-left:6px solid #007bff;
                             border-radius:10px;
-                            padding:10px;
-                            margin-bottom:10px;
-                            font-size:19px;
-                        ">
+                            padding:15px;
+                            margin-bottom:12px;
+                            box-shadow:0 2px 6px rgba(0,0,0,0.12);
+                            font-size:18px;
+                            transition:0.2s;
+                        "
+                        onmouseover="this.style.background='#f0f7ff';"
+                        onmouseout="this.style.background='#ffffff';"
+                    >
                         <b>SKU:</b> {sku}<br>
-                        من: <b>{oldp}</b> → <b>{newp}</b> {arrow}<br>
+                        <b>{oldp}</b> → <b>{newp}</b> {arrow}<br>
                         <span style='color:#777;'>📅 {time_}</span>
                     </div>
 
                     <script>
-                    document.addEventListener("DOMContentLoaded", function(){{  
-                        if ({i} === 0 && !localStorage.getItem("{cid}")) {{  
-                            window.parent.postMessage({{"event":"PLAY_SOUND"}}, "*");  
-                        }}  
+                    document.addEventListener("DOMContentLoaded", function(){{
+                        if ({i} === 0 && !localStorage.getItem("{cid}") && localStorage.getItem("sound_enabled")) {{
+                            window.parent.postMessage({{"event":"PLAY_SOUND"}}, "*");
+                        }}
                     }});
                     </script>
-
                     """, unsafe_allow_html=True)
 
                 st.markdown("</div>", unsafe_allow_html=True)
@@ -337,7 +345,6 @@ while True:
                 card += "</div>"
 
                 components.html(card, height=1300, scrolling=False)
-
 
         # ============================================================
         # توقيت السعودية
