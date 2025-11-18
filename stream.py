@@ -18,8 +18,17 @@ import html
 st.set_page_config(page_title="Noon Prices – Dashboard", layout="wide")
 st.title("📊 Noon Prices – Live Monitoring Dashboard")
 
+# السماح للصوت أول ما المستخدم يضغط أي مكان
+st.markdown("""
+<script>
+document.addEventListener("click", function() {
+    localStorage.setItem("sound_enabled", "1");
+});
+</script>
+""", unsafe_allow_html=True)
+
 # ============================================================
-# صفّارة إنذار طويلة – Base64 (ضع المحتوى هنا)
+# صفّارة إنذار – Base64 (جاهزة)
 # ============================================================
 AUDIO_BASE64 = """
 SUQzAwAAAAAAF1RTU0UAAAAPAAADTGF2ZjU2LjQwLjEwMQAAAAAAAAAAAAAA//uQZAAAAAAD
@@ -40,7 +49,6 @@ AA4AAAAOAAAADwAAAA8AAAAQAAAAEAAAABEAAAARAAAAEgAAABIAAAATAAAAEwAAABQAAAAU
 AAAAFQAAABUAAAAXAAAAFwAAABgAAAAYAAAA
 """
 
-
 # ============================================================
 # وظيفة تشغيل الصوت
 # ============================================================
@@ -48,7 +56,7 @@ def inject_audio_listener():
     js = f"""
     <script>
     window.addEventListener("message", (event) => {{
-        if (event.data.event === "PLAY_SOUND") {{
+        if (event.data.event === "PLAY_SOUND" && localStorage.getItem("sound_enabled")) {{
             var audio = new Audio("data:audio/mp3;base64,{AUDIO_BASE64}");
             audio.volume = 1.0;
             audio.play();
@@ -57,7 +65,6 @@ def inject_audio_listener():
     </script>
     """
     st.markdown(js, unsafe_allow_html=True)
-
 
 # ============================================================
 # تنظيف SKU
@@ -74,7 +81,6 @@ def clean_sku_text(x):
     if parts:
         return max(parts, key=len)
     return x
-
 
 # ============================================================
 # تحميل شيت noon
@@ -97,7 +103,6 @@ def load_sheet():
         df[col] = df[col].apply(clean_sku_text)
 
     return df
-
 
 # ============================================================
 # تحميل history
@@ -128,7 +133,6 @@ def load_history():
 
     return df
 
-
 # ============================================================
 # آخر تغيير
 # ============================================================
@@ -154,7 +158,6 @@ def get_last_change(hist, sku):
         "time": str(last["DateTime"])
     }
 
-
 # ============================================================
 # price → float
 # ============================================================
@@ -167,7 +170,6 @@ def price_to_float(s):
     except:
         return None
 
-
 # ============================================================
 # إعدادات جانبية
 # ============================================================
@@ -178,8 +180,7 @@ search = st.sidebar.text_input("🔍 بحث SKU")
 placeholder = st.empty()
 last_update_widget = st.sidebar.empty()
 
-inject_audio_listener()   # مهم جداً
-
+inject_audio_listener()
 
 # ============================================================
 # LOOP
@@ -195,7 +196,7 @@ while True:
         with placeholder.container():
 
             # ============================================================
-            # 🔔 آخر التغييرات – داخل Scroll صغير
+            # 🔔 آخر التغييرات – داخل Scroll فقط
             # ============================================================
             st.subheader("🔔 آخر التغييرات (داخل Scroll)")
 
@@ -250,7 +251,7 @@ while True:
 
                     <script>
                     document.addEventListener("DOMContentLoaded", function(){{
-                        if ({i} === 0 && !localStorage.getItem("{cid}")) {{
+                        if ({i} === 0 && !localStorage.getItem("{cid}") && localStorage.getItem("sound_enabled")) {{
                             window.parent.postMessage({{"event":"PLAY_SOUND"}}, "*");
                         }}
                     }});
