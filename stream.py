@@ -46,7 +46,7 @@ def load_sheet():
     return df
 
 
-# ================== تحميل شيت history (إصلاح التطابق) ==================
+# ================== تحميل شيت history (الإصدار الإصلاحي الكامل) ==================
 def load_history():
     creds = Credentials.from_service_account_info(
         st.secrets["google_service_account"],
@@ -70,42 +70,65 @@ def load_history():
     # استخراج النص من hyperlink
     def extract_hyperlink_text(x):
         x = str(x).strip()
-        if x.startswith("=") and "HYPERLINK" in x:
+        if x.startswith("=") and "HYPERLINK" in x.upper():
             parts = x.split('"')
             if len(parts) >= 4:
                 return parts[-2]
         return x
 
-    # إصلاح التطابق — تنظيف شامل
+    def canon_alnum(s):
+        if s is None:
+            return ""
+        s = str(s).lower()
+        return re.sub(r"[^0-9a-z]", "", s)
+
     df["SKU"] = df["SKU"].apply(lambda x: clean_sku_text(extract_hyperlink_text(x)))
     df["SKU_lower"] = df["SKU"].str.strip().str.lower()
+    df["SKU_canon"] = df["SKU"].apply(canon_alnum)
 
     return df
 
 
-# =========== استخراج آخر تغيير من history (إصلاح التطابق) ===========
+# =========== استخراج آخر تغيير من history (مطابقة شديدة الذكاء) ===========
 def get_last_change(df_hist, sku):
     if df_hist.empty or not sku:
         return None
 
-    sku_clean = clean_sku_text(sku).strip().lower()
+    sku_clean = clean_sku_text(sku)
+    sku_lower = sku_clean.lower().strip()
+    sku_canon = re.sub(r"[^0-9a-z]", "", sku_lower)
 
-    # تطابق مرن
-    rows = df_hist[df_hist["SKU_lower"] == sku_clean]
+    # 1) تطابق مباشر
+    rows = df_hist[df_hist["SKU_lower"] == sku_lower]
+
+    # 2) تطابق على النسخة الموجزة (بدون رموز)
+    if rows.empty:
+        rows = df_hist[df_hist["SKU_canon"] == sku_canon]
+
+    # 3) تطابق احتوائي (contains)
+    if rows.empty:
+        mask1 = df_hist["SKU"].str.contains(re.escape(sku_clean), case=False, na=False)
+        rows = df_hist[mask1]
+
+    # 4) تطابق احتوائي على النسخة الموجزة
+    if rows.empty:
+        mask2 = df_hist["SKU_canon"].str.contains(sku_canon, na=False)
+        rows = df_hist[mask2]
 
     if rows.empty:
         return None
 
+    rows = rows.copy()
     rows["DateTime"] = pd.to_datetime(rows["DateTime"], errors="coerce")
     rows = rows.sort_values("DateTime")
 
     last = rows.iloc[-1]
 
     return {
-        "old": last["Old Price"],
-        "new": last["New Price"],
-        "change": last["Change"],
-        "time": str(last["DateTime"])
+        "old": last.get("Old Price", ""),
+        "new": last.get("New Price", ""),
+        "change": last.get("Change", ""),
+        "time": str(last.get("DateTime", ""))
     }
 
 
