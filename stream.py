@@ -13,33 +13,34 @@ import re
 st.set_page_config(page_title="Noon Prices Dashboard", layout="wide")
 st.title("📊 Noon Prices – Live Monitoring Dashboard")
 
-# ----------------------------------------------------------------------
-# 1) تنظيف SKU الحقيقي فقط
-# ----------------------------------------------------------------------
+# ====================================================================
+# 1) تنظيف SKU — نفس الطريقة التي يستخدمها السكرايبر والتاريخ
+# ====================================================================
 def clean_sku_text(x):
     if not x:
         return ""
     x = str(x).strip()
 
+    # إزالة الرموز الخفية
     x = re.sub(r"[\u200B-\u200F\u202A-\u202E\uFEFF]", "", x)
 
-    # (SKU)
+    # استخراج SKU من الأقواس (SKU)
     m = re.search(r"\(([A-Za-z0-9]+)\)", x)
     if m:
         return m.group(1).strip()
 
-    # أطول كلمة حروف + أرقام = SKU
+    # أو أطول مقطع أرقام + حروف
     parts = re.findall(r"[A-Za-z0-9]{6,}", x)
     if parts:
         parts.sort(key=len, reverse=True)
         return parts[0]
 
-    return ""
+    return x.strip()
 
 
-# ----------------------------------------------------------------------
-# 2) تحميل الشيت الأساسي
-# ----------------------------------------------------------------------
+# ====================================================================
+# 2) تحميل الشيت الرئيسي
+# ====================================================================
 def load_sheet():
     creds = Credentials.from_service_account_info(
         st.secrets["google_service_account"],
@@ -53,7 +54,7 @@ def load_sheet():
     data = ws.get_all_values()
     df = pd.DataFrame(data[1:], columns=data[0])
 
-    # تنظيف SKU
+    # تنظيف SKU الأعمدة الستة
     sku_cols = ["SKU1","SKU2","SKU3","SKU4","SKU5","SKU6"]
     for col in sku_cols:
         if col in df.columns:
@@ -62,9 +63,9 @@ def load_sheet():
     return df
 
 
-# ----------------------------------------------------------------------
-# 3) تحميل history
-# ----------------------------------------------------------------------
+# ====================================================================
+# 3) تحميل history ومعالجته
+# ====================================================================
 def load_history():
     creds = Credentials.from_service_account_info(
         st.secrets["google_service_account"],
@@ -84,29 +85,36 @@ def load_history():
         return pd.DataFrame()
 
     df = pd.DataFrame(data[1:], columns=data[0])
-    df["SKU"] = df["SKU"].astype(str).apply(clean_sku_text)
-    df["SKU_lower"] = df["SKU"].str.lower().str.strip()
+
+    # تنظيف SKU بطريقة صحيحة
+    df["SKU"] = df["SKU"].astype(str)
+    df["SKU_clean"] = df["SKU"].apply(clean_sku_text)
+    df["SKU_lower"] = df["SKU_clean"].str.lower().str.strip()
+
+    # تحويل التاريخ
     df["DateTime"] = pd.to_datetime(df["DateTime"], errors="coerce")
+
     return df
 
 
-# ----------------------------------------------------------------------
-# 4) دالة استخراج آخر تغيير (Strict Matching)
-# ----------------------------------------------------------------------
+# ====================================================================
+# 4) استخراج آخر تغيير – الآن يعمل للمنافسين 100%
+# ====================================================================
 def get_last_change(df_hist, sku):
+    if df_hist.empty:
+        return None
 
     sku_clean = clean_sku_text(sku).lower().strip()
-
-    if not sku_clean or df_hist.empty:
+    if not sku_clean:
         return None
 
-    match = df_hist[df_hist["SKU_lower"] == sku_clean]
+    rows = df_hist[df_hist["SKU_lower"] == sku_clean]
 
-    if match.empty:
+    if rows.empty:
         return None
 
-    match = match.sort_values("DateTime")
-    last = match.iloc[-1]
+    rows = rows.sort_values("DateTime")
+    last = rows.iloc[-1]
 
     return {
         "old": last["Old Price"],
@@ -116,9 +124,9 @@ def get_last_change(df_hist, sku):
     }
 
 
-# ----------------------------------------------------------------------
-# 5) واجهة Streamlit
-# ----------------------------------------------------------------------
+# ====================================================================
+# 5) Streamlit UI
+# ====================================================================
 st.sidebar.header("⚙️ الإعدادات")
 refresh_rate = st.sidebar.slider("⏱ معدل التحديث (ثواني)", 5, 300, 30)
 search_text = st.sidebar.text_input("🔍 البحث عن SKU")
@@ -127,15 +135,15 @@ placeholder = st.empty()
 last_update_placeholder = st.sidebar.empty()
 
 
-# ----------------------------------------------------------------------
-# 6) عرض الصفحة
-# ----------------------------------------------------------------------
+# ====================================================================
+# 6) عرض البيانات
+# ====================================================================
 while True:
     try:
         df = load_sheet()
         df_hist = load_history()
 
-        # الفلترة
+        # البحث
         if search_text:
             df = df[df.apply(lambda r: r.astype(str).str.contains(search_text, case=False).any(), axis=1)]
 
@@ -175,7 +183,7 @@ while True:
                     price_val = row.get(price_col, "")
                     raw_nudge = row.get(nudge_col, "-")
 
-                    # تجميع النودجز
+                    # إصلاح النودجز
                     if raw_nudge and raw_nudge != "-":
                         nudge_show = " | ".join(
                             [x.strip() for x in raw_nudge.split("|") if x.strip()]
@@ -183,7 +191,7 @@ while True:
                     else:
                         nudge_show = "-"
 
-                    # history
+                    # آخر تغيير
                     change_data = get_last_change(df_hist, sku_val)
 
                     if change_data:
