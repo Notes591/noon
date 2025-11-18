@@ -40,13 +40,6 @@ gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC
 AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
 AAAA//uQZAAAAAABgIAAABAAAAAIAAAAAExBTUUzLjk1LjIAAAAAAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//uQZAAAAAAEwKAAAAgAAAAAAAAAAAAA
-EluZm8AAAAAAQAAAAMAAAADAAAAAwAAAAQAAAAEAAAABAAAAAUAAAAFAAAABgAAAAYAAAAH
-AAAABwAAAAgAAAAIAAAACQAAAAkAAAAKAAAACgAAAAsAAAALAAAADAAAAAwAAAANAAAADQAA
-AA4AAAAOAAAADwAAAA8AAAAQAAAAEAAAABEAAAARAAAAEgAAABIAAAATAAAAEwAAABQAAAAU
-AAAAFQAAABUAAAAXAAAAFwAAABgAAAAYAAAA
 """
 
 # ============================================================
@@ -219,10 +212,22 @@ while True:
 
                 for i, r in recent.iterrows():
 
-                    sku  = html.escape(str(r["SKU"]))
+                    sku  = html.escape(str(r["SKU"]))        # SKU المنافس
                     oldp = html.escape(str(r["Old Price"]))
                     newp = html.escape(str(r["New Price"]))
                     time_ = html.escape(str(r["DateTime"]))
+
+                    # --- البحث عن SKU الأساسي + سعره ---
+                    main_sku = ""
+                    my_price = ""
+                    try:
+                        match = df[df.apply(lambda row: sku in row.values, axis=1)]
+                        if not match.empty:
+                            main_sku = match.iloc[0]["SKU1"]
+                            my_price = match.iloc[0]["Price1"]
+                    except:
+                        pass
+                    # ---------------------------------------------------------
 
                     of = price_to_float(oldp)
                     nf = price_to_float(newp)
@@ -244,14 +249,30 @@ while True:
                             margin-bottom:12px;
                             box-shadow:0 2px 6px rgba(0,0,0,0.12);
                             font-size:18px;
-                            transition:0.2s;
                         "
-                        onmouseover="this.style.background='#f0f7ff';"
-                        onmouseout="this.style.background='#ffffff';"
                     >
-                        <b>SKU:</b> {sku}<br>
-                        <b>{oldp}</b> → <b>{newp}</b> {arrow}<br>
-                        <span style='color:#777;'>📅 {time_}</span>
+
+                        <div style="font-size:20px; font-weight:700; margin-bottom:8px;">
+                            SKU الأساسي: <span style="color:#007bff;">{main_sku}</span>
+                            — <span style="color:#28a745;">سعري: {my_price}</span>
+                        </div>
+
+                        <div style="display:flex; justify-content:space-between; align-items:center; font-size:18px; gap:15px;">
+                            
+                            <div>
+                                <b>SKU المنافس:</b> {sku}
+                            </div>
+
+                            <div style="color:#555; font-size:16px;">
+                                📅 {time_}
+                            </div>
+
+                            <div style="font-weight:700;">
+                                {oldp} → {newp} {arrow}
+                            </div>
+
+                        </div>
+
                     </div>
 
                     <script>
@@ -320,7 +341,6 @@ while True:
 
                     <b style='font-size:24px;'>💰 سعر منتجك:</b><br>
                     <span style='font-size:36px; font-weight:bold;'>{row.get("Price1","")}</span>
-                    <br><span style='color:#666;'>لا يوجد تغيير لمنتجك</span>
                     <hr>
                 """
 
