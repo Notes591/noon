@@ -167,7 +167,7 @@ last_update_placeholder = st.sidebar.empty()
 
 
 # ====================================================================
-# 6) عرض البيانات — **الكارت الكبير بدون قصّ**
+# 6) عرض البيانات
 # ====================================================================
 while True:
     try:
@@ -175,10 +175,67 @@ while True:
         df_hist = load_history()
 
         if search_text:
-            df = df[df.apply(lambda r: r.astype(str).str.contains(search_text, case=False).any(), axis=1)]
+            df = df[df.apply(
+                lambda r: r.astype(str).str.contains(search_text, case=False).any(),
+                axis=1
+            )]
 
         with placeholder.container():
 
+            # ============================================================
+            # 🔔 قسم التغييرات الجديدة فقط (آخر 10 تغييرات)
+            # ============================================================
+            st.subheader("🔔 التغييرات الأخيرة (آخر 10 تغييرات)")
+
+            if not df_hist.empty:
+                recent_changes = df_hist.sort_values("DateTime", ascending=False).head(10)
+                recent_changes = recent_changes.reset_index(drop=True)
+
+                for idx, change in recent_changes.iterrows():
+                    old_p = change["Old Price"]
+                    new_p = change["New Price"]
+                    sku = change["SKU"]
+                    time_c = change["DateTime"]
+
+                    # اتجاه السعر
+                    try:
+                        of = float(str(old_p).replace(",", "").replace("SAR", ""))
+                        nf = float(str(new_p).replace(",", "").replace("SAR", ""))
+                        arrow = "🔺" if nf > of else "🔻" if nf < of else "➡️"
+                    except:
+                        arrow = "➡️"
+
+                    # 🔥 أول تغيير = أحمر
+                    if idx == 0:
+                        bg = "#ffdddd"
+                        border_color = "#ff4444"
+                    else:
+                        bg = "#ffffff"
+                        border_color = "#ddd"
+
+                    st.markdown(f"""
+                    <div style='
+                        background:{bg};
+                        padding:15px;
+                        border-radius:10px;
+                        margin-bottom:10px;
+                        border:2px solid {border_color};
+                        width:60%;
+                        font-size:20px;
+                        direction:rtl;
+                    '>
+                        <b>SKU:</b> {sku}<br>
+                        <b>من:</b> {old_p}  →  <b>إلى:</b> {new_p} {arrow}<br>
+                        <span style='color:#666;'>📅 {time_c}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            else:
+                st.info("لا يوجد أي تغييرات مسجلة بعد.")
+
+            # ============================================================
+            # 🟦 الكروت
+            # ============================================================
             st.subheader("🟦 عرض المنتجات – Cards View")
 
             for idx, row in df.iterrows():
@@ -187,7 +244,6 @@ while True:
                 if not sku_main:
                     continue
 
-                # --- تفاصيل التغيير بخط كبير ---
                 def change_html(sku):
                     ch = get_last_change(df_hist, sku)
                     if ch:
@@ -217,7 +273,6 @@ while True:
                         """
                     return "<span style='font-size:16px; color:#777;'>لا يوجد تغييرات</span>"
 
-                # ---------------- الكارت ----------------
                 html_card = f"""
                 <div style="
                     border:1px solid #cccccc;
