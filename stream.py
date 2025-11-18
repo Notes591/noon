@@ -152,7 +152,7 @@ def get_last_change(hist, sku):
     }
 
 # ============================================================
-# السعر → float
+# price → float
 # ============================================================
 def price_to_float(s):
     if not s:
@@ -189,12 +189,13 @@ while True:
         with placeholder.container():
 
             # ============================================================
-            # 🔔 آخر التغييرات – إشعارات Notifications
+            # 🔔 آخر التغييرات – إشعارات Notifications (معدل)
             # ============================================================
             st.subheader("🔔 آخر التغييرات (Notifications)")
 
             if not hist.empty:
 
+                # آخر 5 تغييرات فقط كما طلبت
                 recent = hist.sort_values("DateTime", ascending=False).head(5).reset_index(drop=True)
 
                 st.markdown("""
@@ -212,34 +213,36 @@ while True:
 
                 for i, r in recent.iterrows():
 
-                    sku  = html.escape(str(r["SKU"]))        # SKU المنافس
+                    sku  = html.escape(str(r["SKU"]))        # SKU المنافس (من history)
                     oldp = html.escape(str(r["Old Price"]))
                     newp = html.escape(str(r["New Price"]))
                     time_ = html.escape(str(r["DateTime"]))
 
-                    # --- ربط SKU الأساسي + السعر الخاص بك ---
+                    # --- البحث عن SKU الأساسي + سعره في df (noon sheet) ---
                     main_sku = ""
                     my_price = ""
                     try:
-                        match = df[df.apply(lambda row: sku in row.values, axis=1)]
+                        # نبحث في صفوف df إذا كان sku المنافس موجود ضمن أي عمود
+                        match = df[df.apply(lambda row: sku in row.astype(str).values, axis=1)]
                         if not match.empty:
-                            main_sku = match.iloc[0]["SKU1"]
-                            my_price = match.iloc[0]["Price1"]
-                    except:
-                        pass
+                            main_sku = match.iloc[0].get("SKU1", "")
+                            my_price = match.iloc[0].get("Price1", "")
+                    except Exception:
+                        main_sku = ""
+                        my_price = ""
                     # ---------------------------------------------------------
 
                     of = price_to_float(oldp)
                     nf = price_to_float(newp)
 
                     arrow = "➡️"
-                    if of and nf:
+                    if of is not None and nf is not None:
                         if nf > of: arrow = "🔺"
                         elif nf < of: arrow = "🔻"
 
                     cid = f"{sku}_{time_}"
 
-                    # --- تصميم الإشعار الجديد ---
+                    # --- كل إشعار داخل Card منسق (مطلوب) ---
                     st.markdown(f"""
                     <div onclick="localStorage.setItem('{cid}','1')"
                         style="
@@ -248,29 +251,28 @@ while True:
                             border-radius:10px;
                             padding:15px;
                             margin-bottom:15px;
-                            box-shadow:0 2px 6px rgba(0,0,0,0.15);
+                            box-shadow:0 2px 6px rgba(0,0,0,0.12);
                             font-size:18px;
                         "
                     >
 
-                        <div style="font-size:20px; font-weight:700; margin-bottom:10px;">
+                        <div style="font-size:20px; font-weight:700; margin-bottom:8px;">
                             SKU الأساسي:
                             <span style="color:#007bff;">{main_sku}</span>
                             — <span style="color:#28a745;">سعري: {my_price}</span>
                         </div>
 
-                        <div style="display:flex; justify-content:space-between; align-items:center;
-                                    font-size:18px; gap:15px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; font-size:18px; gap:15px;">
 
-                            <div style="min-width:32%;">
+                            <div style="min-width:33%; overflow:hidden; text-overflow:ellipsis;">
                                 <b>SKU المنافس:</b> {sku}
                             </div>
 
-                            <div style="color:#555; font-size:16px; min-width:32%; text-align:center;">
+                            <div style="color:#555; font-size:16px; min-width:33%; text-align:center;">
                                 📅 {time_}
                             </div>
 
-                            <div style="font-weight:700; min-width:32%; text-align:end;">
+                            <div style="font-weight:700; min-width:33%; text-align:end;">
                                 {oldp} → {newp} {arrow}
                             </div>
 
@@ -302,6 +304,7 @@ while True:
                 if not sku_main:
                     continue
 
+                # دالة التغيير للمنافس — بعد الإصلاح
                 def ch_html(sku):
                     if not sku or str(sku).strip() == "":
                         return "<span style='color:#777;'>لا يوجد SKU للمنافس</span>"
@@ -344,6 +347,7 @@ while True:
 
                     <b style='font-size:24px;'>💰 سعر منتجك:</b><br>
                     <span style='font-size:36px; font-weight:bold;'>{row.get("Price1","")}</span>
+                    <br><span style='color:#666;'>لا يوجد تغيير لمنتجك</span>
                     <hr>
                 """
 
@@ -368,6 +372,7 @@ while True:
                 card += "</div>"
 
                 components.html(card, height=1300, scrolling=False)
+
 
         # ============================================================
         # توقيت السعودية
