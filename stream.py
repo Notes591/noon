@@ -19,7 +19,6 @@ def clean_sku_text(x):
     if x is None:
         return ""
     x = str(x)
-    # إزالة جميع الحروف المخفية Zero-Width + RTL + LTR marks
     x = re.sub(r"[\u200B-\u200F\u202A-\u202E\uFEFF]", "", x)
     return x.strip()
 
@@ -40,7 +39,6 @@ def load_sheet():
     data = ws.get_all_values()
     df = pd.DataFrame(data[1:], columns=data[0])
     
-    # تنظيف كل SKUs في الجدول الأساسي
     for col in ["SKU1", "SKU2", "SKU3", "SKU4", "SKU5", "SKU6"]:
         if col in df.columns:
             df[col] = df[col].apply(clean_sku_text)
@@ -48,7 +46,7 @@ def load_sheet():
     return df
 
 
-# ================== تحميل شيت history ==================
+# ================== تحميل شيت history (إصلاح التطابق) ==================
 def load_history():
     creds = Credentials.from_service_account_info(
         st.secrets["google_service_account"],
@@ -69,7 +67,7 @@ def load_history():
 
     df = pd.DataFrame(data[1:], columns=data[0])
 
-    # لو خلايا SKU فيها Hyperlink — استخرج النص منها
+    # استخراج النص من hyperlink
     def extract_hyperlink_text(x):
         x = str(x).strip()
         if x.startswith("=") and "HYPERLINK" in x:
@@ -78,20 +76,23 @@ def load_history():
                 return parts[-2]
         return x
 
-    df["SKU"] = df["SKU"].apply(extract_hyperlink_text)
-    df["SKU"] = df["SKU"].apply(clean_sku_text)
+    # إصلاح التطابق — تنظيف شامل
+    df["SKU"] = df["SKU"].apply(lambda x: clean_sku_text(extract_hyperlink_text(x)))
+    df["SKU_lower"] = df["SKU"].str.strip().str.lower()
 
     return df
 
 
-# =========== استخراج آخر تغيير من history ===========
+# =========== استخراج آخر تغيير من history (إصلاح التطابق) ===========
 def get_last_change(df_hist, sku):
     if df_hist.empty or not sku:
         return None
 
-    sku = clean_sku_text(sku)
+    sku_clean = clean_sku_text(sku).strip().lower()
 
-    rows = df_hist[df_hist["SKU"] == sku]
+    # تطابق مرن
+    rows = df_hist[df_hist["SKU_lower"] == sku_clean]
+
     if rows.empty:
         return None
 
@@ -125,7 +126,6 @@ while True:
         df = load_sheet()
         df_hist = load_history()
 
-        # فلترة حسب البحث
         if search_text:
             df = df[df.apply(lambda row: row.astype(str).str.contains(search_text, case=False).any(), axis=1)]
 
@@ -137,7 +137,6 @@ while True:
                 if sku_main == "":
                     continue
 
-                # كل المنافسين
                 sku_list = [
                     ("سعر منتجك", "SKU1", "Price1"),
                     ("المنافس 1", "SKU2", "Price2"),
@@ -147,7 +146,6 @@ while True:
                     ("المنافس 5", "SKU6", "Price6"),
                 ]
 
-                # ========== HTML CARD ==========
                 html = f"""
                 <div style="border:1px solid #ccc; padding:20px; border-radius:12px;
                             margin-bottom:20px; background:#fff; direction:rtl;
@@ -161,7 +159,6 @@ while True:
                     <ul style="font-size:18px; line-height:1.9; list-style:none; padding:0;">
                 """
 
-                # === عرض المنافسين ===
                 for label, sku_col, price_col in sku_list:
 
                     sku_val = clean_sku_text(row.get(sku_col, ""))
@@ -190,7 +187,6 @@ while True:
 
                 components.html(html, height=520)
 
-        # آخر تحديث
         last_update_placeholder.markdown(
             f"🕒 آخر تحديث: **{time.strftime('%Y-%m-%d %H:%M:%S')}**"
         )
