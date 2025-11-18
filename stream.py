@@ -66,7 +66,7 @@ def load_sheet():
 
 
 # ====================================================================
-# 3) تحميل history
+# 3) load history
 # ====================================================================
 def load_history():
     creds = Credentials.from_service_account_info(
@@ -103,7 +103,7 @@ def load_history():
 
 
 # ====================================================================
-# 4) Smart Matching + جلب آخر تغيير
+# 4) Smart Matching + جلب آخر تغيير + تنسيق كبير
 # ====================================================================
 def get_last_change(df_hist, sku):
     if df_hist.empty:
@@ -167,7 +167,7 @@ last_update_placeholder = st.sidebar.empty()
 
 
 # ====================================================================
-# 6) عرض البيانات
+# 6) عرض البيانات + تكبير الأسعار + تكبير التغيير
 # ====================================================================
 while True:
     try:
@@ -187,6 +187,7 @@ while True:
                 if not sku_main:
                     continue
 
+                # ------- دالة تكبير تفاصيل التغيير -------
                 def change_html(sku):
                     ch = get_last_change(df_hist, sku)
                     if ch:
@@ -196,6 +197,7 @@ while True:
 
                         old_f = price_to_float(old)
                         new_f = price_to_float(new)
+
                         if old_f is not None and new_f is not None:
                             if new_f > old_f:
                                 arrow = "🔺"
@@ -207,14 +209,17 @@ while True:
                             arrow = "➡️"
 
                         return f"""
-                            <span style='font-size:14px; color:#444;'>
+                            <span style='font-size:22px; font-weight:bold; color:#000;'>
                                 🔄 من <b>{old}</b> إلى <b>{new}</b> {arrow}
-                                <br>📅 {time_str}
+                                <br>
+                                <span style='font-size:18px; color:#444;'>📅 {time_str}</span>
                             </span>
                         """
-                    else:
-                        return "<span style='font-size:14px; color:#777;'>لا يوجد تغييرات</span>"
 
+                    else:
+                        return "<span style='font-size:16px; color:#777;'>لا يوجد تغييرات</span>"
+
+                # ------- الكارت -------
                 html_card = f"""
                 <div style="
                     border:1px solid #cccccc;
@@ -227,45 +232,55 @@ while True:
                     width:70%;
                     box-shadow:0 1px 6px rgba(0,0,0,0.08);
                 ">
-                    <h2 style="margin:0 0 10px; font-size:22px;">
+                    <h2 style="margin:0 0 10px; font-size:24px;">
                         📦 <b>الـSKU الأساسي:</b>
                         <span style="color:#007bff;">{sku_main}</span>
                     </h2>
 
                     <div style="height:1px; background:#ddd; margin:10px 0;"></div>
 
-                    <h3 style="margin:10px 0; font-size:18px;">🏷️ <b>الأسعار + آخر تغيير:</b></h3>
+                    <h3 style="margin:10px 0; font-size:20px;">🏷️ <b>الأسعار + آخر تغيير:</b></h3>
 
-                    <ul style="font-size:16px; line-height:2; list-style:none; padding:0;">
+                    <ul style="font-size:18px; line-height:2.2; list-style:none; padding:0;">
 
+                        <!-- سعر منتجك كبير -->
                         <li>
-                            🟦 <b>سعر منتجك:</b> {row.get("Price1","")}
+                            🟦 <b>سعر منتجك:</b>
+                            <span style="font-size:26px; font-weight:bold; color:#000;">
+                                {row.get("Price1","")}
+                            </span>
                             <br>
-                            <span style="font-size:14px; color:#666;">لا يوجد تغيير لمنتجك</span>
+                            <span style="font-size:16px; color:#666;">لا يوجد تغيير لمنتجك</span>
                         </li>
 
+                        <!-- المنافسين بخط كبير -->
                         <li>
-                            🟨 <b>المنافس 1 ({row.get("SKU2","")}):</b> {row.get("Price2","")}
+                            🟨 <b>المنافس 1 ({row.get("SKU2","")}):</b>
+                            <span style="font-size:26px; font-weight:bold; color:#000;">{row.get("Price2","")}</span>
                             <br>{change_html(row.get("SKU2",""))}
                         </li>
 
                         <li>
-                            🟧 <b>المنافس 2 ({row.get("SKU3","")}):</b> {row.get("Price3","")}
+                            🟧 <b>المنافس 2 ({row.get("SKU3","")}):</b>
+                            <span style="font-size:26px; font-weight:bold; color:#000;">{row.get("Price3","")}</span>
                             <br>{change_html(row.get("SKU3",""))}
                         </li>
 
                         <li>
-                            🟥 <b>المنافس 3 ({row.get("SKU4","")}):</b> {row.get("Price4","")}
+                            🟥 <b>المنافس 3 ({row.get("SKU4","")}):</b>
+                            <span style="font-size:26px; font-weight:bold; color:#000;">{row.get("Price4","")}</span>
                             <br>{change_html(row.get("SKU4",""))}
                         </li>
 
                         <li>
-                            🟩 <b>المنافس 4 ({row.get("SKU5","")}):</b> {row.get("Price5","")}
+                            🟩 <b>المنافس 4 ({row.get("SKU5","")}):</b>
+                            <span style="font-size:26px; font-weight:bold; color:#000;">{row.get("Price5","")}</span>
                             <br>{change_html(row.get("SKU5",""))}
                         </li>
 
                         <li>
-                            🟪 <b>المنافس 5 ({row.get("SKU6","")}):</b> {row.get("Price6","")}
+                            🟪 <b>المنافس 5 ({row.get("SKU6","")}):</b>
+                            <span style="font-size:26px; font-weight:bold; color:#000;">{row.get("Price6","")}</span>
                             <br>{change_html(row.get("SKU6",""))}
                         </li>
 
@@ -274,10 +289,10 @@ while True:
                 </div>
                 """
 
-                components.html(html_card, height=540, scrolling=False)
+                components.html(html_card, height=600, scrolling=False)
 
         # ============================
-        #    توقيت السعودية الحقيقي
+        #    توقيت السعودية
         # ============================
         ksa_time = datetime.utcnow() + timedelta(hours=3)
         last_update_placeholder.markdown(
