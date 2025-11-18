@@ -52,7 +52,7 @@ def load_history():
     try:
         ws = client.open_by_key(SPREADSHEET_ID).worksheet("history")
     except:
-        return pd.DataFrame()  # لو مفيش history نرجع فاضي
+        return pd.DataFrame()
 
     data = ws.get_all_values()
 
@@ -63,9 +63,12 @@ def load_history():
     return df
 
 
-# استخراج آخر تغيير لأي SKU بشكل مستقل
+# استخراج آخر تغيير بناءً على SKU نفسه فقط
 def get_last_change(df_hist, sku):
     if df_hist.empty:
+        return None
+
+    if sku is None or sku == "" or sku == "-":
         return None
 
     rows = df_hist[df_hist["SKU"] == sku]
@@ -132,7 +135,6 @@ while True:
                 if sku_main == "":
                     continue
 
-                # الأسعار + المنافسين
                 sku_list = [
                     ("سعر منتجك", "SKU1", "Price1"),
                     ("المنافس 1", "SKU2", "Price2"),
@@ -154,7 +156,7 @@ while True:
                     font-family:'Tajawal', sans-serif;
                 ">
                     <h2 style="margin:0 0 10px; font-size:24px;">
-                        📦 <b>الـSKU الأساسي:</b>
+                        📦 <b>SKU الأساسي:</b>
                         <span style="color:#007bff;">{sku_main}</span>
                     </h2>
 
@@ -167,10 +169,11 @@ while True:
 
                 # --------- loop competitors + history ---------
                 for label, sku_col, price_col in sku_list:
-                    sku_val = row.get(sku_col, "")
+
+                    sku_val = str(row.get(sku_col, "")).strip()
                     price_val = row.get(price_col, "")
 
-                    # ← أهم تعديل: كل SKU له تغيير مستقل
+                    # استخراج التغيير الصحيح للمنافس
                     change_data = get_last_change(df_hist, sku_val)
 
                     if change_data:
@@ -199,7 +202,7 @@ while True:
                 </div>
                 """
 
-                components.html(html, height=480)
+                components.html(html, height=520)
 
             # ---------------------------------------------------
             #                   الجدول الأصلي
