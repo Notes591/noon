@@ -55,8 +55,7 @@ st.sidebar.write("Developed for Noon Monitoring 🚀")
 placeholder = st.empty()
 last_update_placeholder = st.sidebar.empty()
 
-
-# تلوين السعر بناءً على الزيادة والنقصان
+# تلوين السعر بناءً على الزيادة أو النقصان إن وُجد
 def highlight_changes(val):
     val = str(val)
     if "↑" in val:
@@ -64,6 +63,14 @@ def highlight_changes(val):
     if "↓" in val:
         return "background-color: #ffd1d1;"
     return ""
+
+
+# وظيفة تنظيف السطر (السعر)
+def clean_price(value):
+    """ يرجع فقط السعر الرئيسي بدون النصوص الزائدة """
+    if not value:
+        return ""
+    return str(value).split("|")[0].strip()
 
 
 # التحديث التلقائي
@@ -79,11 +86,11 @@ while True:
         if show_only_changed:
             df = df[df.astype(str).apply(lambda row: "↑" in "".join(row) or "↓" in "".join(row), axis=1)]
 
-        # تلوين
+        # تلوين الجدول
         styled_df = df.style.applymap(highlight_changes)
 
         # --------------------------
-        # 🎴 عرض المنتجات بطريقة كروت Cards
+        # 🎴 عرض المنتجات بطريقة كروت Cards (منسّقة)
         # --------------------------
         with placeholder.container():
 
@@ -92,8 +99,17 @@ while True:
             for idx, row in df.iterrows():
 
                 # تجاهل الصفوف التي لا تحتوي SKU1
-                if not row.get('SKU1') or row.get('SKU1').strip() == "":
+                sku_main = row.get("SKU1", "").strip()
+                if sku_main == "":
                     continue
+
+                # الأسعار بعد التنظيف
+                price1 = clean_price(row.get("Price1", ""))
+                price2 = clean_price(row.get("Price2", ""))
+                price3 = clean_price(row.get("Price3", ""))
+                price4 = clean_price(row.get("Price4", ""))
+                price5 = clean_price(row.get("Price5", ""))
+                price6 = clean_price(row.get("Price6", ""))
 
                 st.markdown(f"""
                 <div style="
@@ -105,23 +121,23 @@ while True:
                     box-shadow:0 2px 6px rgba(0,0,0,0.06);
                 ">
                     <h2 style="margin-bottom:5px;">📦 SKU الأساسي:
-                        <span style="color:#007bff;">{row.get('SKU1','')}</span>
+                        <span style="color:#007bff;">{sku_main}</span>
                     </h2>
 
                     <hr style="margin:10px 0;">
 
-                    <h3>🏷️ أسعارك وأسعار المنافسين:</h3>
+                    <h3>🏷️ الأسعار (منسّقة):</h3>
 
                     <ul style="font-size:17px; line-height:1.6;">
-                        <li><b>🟦 سعر منتجك (Price1):</b> {row.get('Price1','')}</li>
-                        <li><b>🟨 المنافس 1 ({row.get('SKU2','')}):</b> {row.get('Price2','')}</li>
-                        <li><b>🟧 المنافس 2 ({row.get('SKU3','')}):</b> {row.get('Price3','')}</li>
-                        <li><b>🟥 المنافس 3 ({row.get('SKU4','')}):</b> {row.get('Price4','')}</li>
-                        <li><b>🟩 المنافس 4 ({row.get('SKU5','')}):</b> {row.get('Price5','')}</li>
-                        <li><b>🟪 المنافس 5 ({row.get('SKU6','')}):</b> {row.get('Price6','')}</li>
+                        <li><b>🟦 سعر منتجك:</b> {price1 or '-'} </li>
+                        <li><b>🟨 المنافس 1 ({row.get('SKU2','')}):</b> {price2 or '-'} </li>
+                        <li><b>🟧 المنافس 2 ({row.get('SKU3','')}):</b> {price3 or '-'} </li>
+                        <li><b>🟥 المنافس 3 ({row.get('SKU4','')}):</b> {price4 or '-'} </li>
+                        <li><b>🟩 المنافس 4 ({row.get('SKU5','')}):</b> {price5 or '-'} </li>
+                        <li><b>🟪 المنافس 5 ({row.get('SKU6','')}):</b> {price6 or '-'} </li>
                     </ul>
 
-                    <p><b>📅 آخر تحديث:</b> {row.get('Last Update','')}</p>
+                    <p style="margin-top:10px;"><b>📅 آخر تحديث:</b> {row.get('Last Update','')}</p>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -131,7 +147,7 @@ while True:
             st.subheader("📋 الجدول الأصلي")
             st.dataframe(styled_df, use_container_width=True)
 
-        # تحديث الوقت
+        # تحديث توقيت العرض
         last_update_placeholder.markdown(
             f"🕒 آخر تحديث: **{time.strftime('%Y-%m-%d %H:%M:%S')}**"
         )
