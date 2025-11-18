@@ -52,7 +52,7 @@ def load_history():
     try:
         ws = client.open_by_key(SPREADSHEET_ID).worksheet("history")
     except:
-        return pd.DataFrame()  # لو مفيش history نرجع فاضي
+        return pd.DataFrame()
 
     data = ws.get_all_values()
 
@@ -63,7 +63,7 @@ def load_history():
     return df
 
 
-# استخراج آخر تغيير لسكيو
+# استخراج آخر تغيير لسكيو1 فقط
 def get_last_change(df_hist, sku):
     if df_hist.empty:
         return None
@@ -92,12 +92,10 @@ refresh_rate = st.sidebar.slider(
 
 search_text = st.sidebar.text_input("🔍 البحث عن SKU")
 
-st.sidebar.markdown("---")
 placeholder = st.empty()
 last_update_placeholder = st.sidebar.empty()
 
 
-# تلوين الزيادة والنقصان
 def highlight_changes(val):
     val = str(val)
     if "↑" in val:
@@ -107,7 +105,6 @@ def highlight_changes(val):
     return ""
 
 
-# =============== التحديث ==================
 while True:
     try:
         df = load_sheet()
@@ -121,9 +118,6 @@ while True:
 
         with placeholder.container():
 
-            # ---------------------------------------------------
-            #                     Cards View
-            # ---------------------------------------------------
             st.subheader("🟦 عرض المنتجات بطريقة الكروت – Cards View")
 
             for idx, row in df.iterrows():
@@ -132,7 +126,6 @@ while True:
                 if sku_main == "":
                     continue
 
-                # الأسعار
                 sku_list = [
                     ("سعر منتجك", "SKU1", "Price1"),
                     ("المنافس 1", "SKU2", "Price2"),
@@ -142,7 +135,6 @@ while True:
                     ("المنافس 5", "SKU6", "Price6"),
                 ]
 
-                # ------------------------ HTML CARD ------------------------
                 html = f"""
                 <div style="
                     border:1px solid #cccccc;
@@ -165,12 +157,13 @@ while True:
                     <ul style="font-size:18px; line-height:1.9; list-style:none; padding:0;">
                 """
 
-                # --------- loop competitors + history ---------
                 for label, sku_col, price_col in sku_list:
                     sku_val = row.get(sku_col, "")
                     price_val = row.get(price_col, "")
 
-                    change_data = get_last_change(df_hist, sku_val)
+                    # 🔥 التعديل المهم — نستخدم آخر تغيير للـ SKU1 فقط
+                    change_data = get_last_change(df_hist, sku_main)
+
                     if change_data:
                         change_html = f"""
                         <div style='font-size:15px; margin-top:3px; color:#555;'>
@@ -199,15 +192,9 @@ while True:
 
                 components.html(html, height=480)
 
-            # ---------------------------------------------------
-            #                   الجدول الأصلي
-            # ---------------------------------------------------
             st.subheader("📋 الجدول الأصلي")
             st.dataframe(styled_df, use_container_width=True)
 
-            # ---------------------------------------------------
-            #                   جدول history
-            # ---------------------------------------------------
             st.subheader("📉 سجل تغييرات الأسعار – History")
 
             if df_hist.empty:
