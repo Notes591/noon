@@ -31,7 +31,7 @@ def load_sheet():
     return df
 
 
-# Sidebar إعدادات
+# Sidebar
 st.sidebar.header("⚙️ الإعدادات")
 
 refresh_rate = st.sidebar.slider(
@@ -39,23 +39,14 @@ refresh_rate = st.sidebar.slider(
     5, 300, 30
 )
 
-search_text = st.sidebar.text_input(
-    "🔍 البحث عن SKU"
-)
-
-show_only_changed = st.sidebar.checkbox(
-    "عرض الأسعار التي تغيّرت فقط",
-    value=False
-)
+search_text = st.sidebar.text_input("🔍 البحث عن SKU")
 
 st.sidebar.markdown("---")
-st.sidebar.write("Developed for Noon Monitoring 🚀")
-
-# Placeholder
 placeholder = st.empty()
 last_update_placeholder = st.sidebar.empty()
 
-# تلوين السعر بناءً على الزيادة أو النقصان إن وُجد
+
+# تلوين الزيادة والنقصان
 def highlight_changes(val):
     val = str(val)
     if "↑" in val:
@@ -65,89 +56,72 @@ def highlight_changes(val):
     return ""
 
 
-# وظيفة تنظيف السطر (السعر)
-def clean_price(value):
-    """ يرجع فقط السعر الرئيسي بدون النصوص الزائدة """
-    if not value:
-        return ""
-    return str(value).split("|")[0].strip()
-
-
 # التحديث التلقائي
 while True:
     try:
         df = load_sheet()
 
-        # بحث
         if search_text:
             df = df[df.apply(lambda row: row.astype(str).str.contains(search_text, case=False).any(), axis=1)]
 
-        # عرض المتغير فقط
-        if show_only_changed:
-            df = df[df.astype(str).apply(lambda row: "↑" in "".join(row) or "↓" in "".join(row), axis=1)]
-
-        # تلوين الجدول
         styled_df = df.style.applymap(highlight_changes)
 
-        # --------------------------
-        # 🎴 عرض المنتجات بطريقة كروت Cards (منسّقة)
-        # --------------------------
         with placeholder.container():
 
             st.subheader("🟦 عرض المنتجات بطريقة الكروت – Cards View")
 
             for idx, row in df.iterrows():
 
-                # تجاهل الصفوف التي لا تحتوي SKU1
                 sku_main = row.get("SKU1", "").strip()
                 if sku_main == "":
                     continue
 
-                # الأسعار بعد التنظيف
-                price1 = clean_price(row.get("Price1", ""))
-                price2 = clean_price(row.get("Price2", ""))
-                price3 = clean_price(row.get("Price3", ""))
-                price4 = clean_price(row.get("Price4", ""))
-                price5 = clean_price(row.get("Price5", ""))
-                price6 = clean_price(row.get("Price6", ""))
+                # الأسعار كما هي بدون تقطيع
+                price1 = row.get("Price1", "")
+                price2 = row.get("Price2", "")
+                price3 = row.get("Price3", "")
+                price4 = row.get("Price4", "")
+                price5 = row.get("Price5", "")
+                price6 = row.get("Price6", "")
 
                 st.markdown(f"""
                 <div style="
-                    border:1px solid #ccc;
+                    border:1px solid #cccccc;
                     padding:20px;
                     border-radius:12px;
-                    margin-bottom:15px;
+                    margin-bottom:20px;
                     background:#ffffff;
-                    box-shadow:0 2px 6px rgba(0,0,0,0.06);
+                    direction:rtl;
+                    font-family:'Tajawal', sans-serif;
                 ">
-                    <h2 style="margin-bottom:5px;">📦 SKU الأساسي:
+                    <h2 style="margin:0 0 10px; font-size:24px;">
+                        📦 <b>الـSKU الأساسي:</b>
                         <span style="color:#007bff;">{sku_main}</span>
                     </h2>
 
-                    <hr style="margin:10px 0;">
+                    <div style="height:1px; background:#ddd; margin:10px 0;"></div>
 
-                    <h3>🏷️ الأسعار (منسّقة):</h3>
+                    <h3 style="margin:10px 0; font-size:20px;">🏷️ <b>الأسعار:</b></h3>
 
-                    <ul style="font-size:17px; line-height:1.6;">
-                        <li><b>🟦 سعر منتجك:</b> {price1 or '-'} </li>
-                        <li><b>🟨 المنافس 1 ({row.get('SKU2','')}):</b> {price2 or '-'} </li>
-                        <li><b>🟧 المنافس 2 ({row.get('SKU3','')}):</b> {price3 or '-'} </li>
-                        <li><b>🟥 المنافس 3 ({row.get('SKU4','')}):</b> {price4 or '-'} </li>
-                        <li><b>🟩 المنافس 4 ({row.get('SKU5','')}):</b> {price5 or '-'} </li>
-                        <li><b>🟪 المنافس 5 ({row.get('SKU6','')}):</b> {price6 or '-'} </li>
+                    <ul style="font-size:18px; line-height:1.9; list-style:none; padding:0;">
+                        <li>🟦 <b>سعر منتجك:</b> {price1}</li>
+                        <li>🟨 <b>المنافس 1 ({row.get('SKU2','')}):</b> {price2}</li>
+                        <li>🟧 <b>المنافس 2 ({row.get('SKU3','')}):</b> {price3}</li>
+                        <li>🟥 <b>المنافس 3 ({row.get('SKU4','')}):</b> {price4}</li>
+                        <li>🟩 <b>المنافس 4 ({row.get('SKU5','')}):</b> {price5}</li>
+                        <li>🟪 <b>المنافس 5 ({row.get('SKU6','')}):</b> {price6}</li>
                     </ul>
 
-                    <p style="margin-top:10px;"><b>📅 آخر تحديث:</b> {row.get('Last Update','')}</p>
+                    <p style="margin-top:15px; font-size:16px;">
+                        📅 <b>آخر تحديث:</b> {row.get('Last Update','')}
+                    </p>
                 </div>
                 """, unsafe_allow_html=True)
 
-            # --------------------------
-            # 📋 عرض الجدول الأصلي
-            # --------------------------
+            # الجدول الأصلي
             st.subheader("📋 الجدول الأصلي")
             st.dataframe(styled_df, use_container_width=True)
 
-        # تحديث توقيت العرض
         last_update_placeholder.markdown(
             f"🕒 آخر تحديث: **{time.strftime('%Y-%m-%d %H:%M:%S')}**"
         )
