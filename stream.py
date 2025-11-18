@@ -40,6 +40,13 @@ gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC
 AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
 AAAA//uQZAAAAAABgIAAABAAAAAIAAAAAExBTUUzLjk1LjIAAAAAAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//uQZAAAAAAEwKAAAAgAAAAAAAAAAAAA
+EluZm8AAAAAAQAAAAMAAAADAAAAAwAAAAQAAAAEAAAABAAAAAUAAAAFAAAABgAAAAYAAAAH
+AAAABwAAAAgAAAAIAAAACQAAAAkAAAAKAAAACgAAAAsAAAALAAAADAAAAAwAAAANAAAADQAA
+AA4AAAAOAAAADwAAAA8AAAAQAAAAEAAAABEAAAARAAAAEgAAABIAAAATAAAAEwAAABQAAAAU
+AAAAFQAAABUAAAAXAAAAFwAAABgAAAAYAAAA
 """
 
 # ============================================================
@@ -189,14 +196,13 @@ while True:
         with placeholder.container():
 
             # ============================================================
-            # 🔔 آخر التغييرات – إشعارات Notifications (معدل)
+            # 🔔 آخر التغييرات – داخل Scroll
             # ============================================================
-            st.subheader("🔔 آخر التغييرات (Notifications)")
+            st.subheader("🔔 آخر التغييرات (داخل Scroll)")
 
             if not hist.empty:
 
-                # آخر 5 تغييرات فقط كما طلبت
-                recent = hist.sort_values("DateTime", ascending=False).head(5).reset_index(drop=True)
+                recent = hist.sort_values("DateTime", ascending=False).head(10).reset_index(drop=True)
 
                 st.markdown("""
                 <div style="
@@ -213,71 +219,34 @@ while True:
 
                 for i, r in recent.iterrows():
 
-                    sku  = html.escape(str(r["SKU"]))        # SKU المنافس (من history)
+                    sku  = html.escape(str(r["SKU"]))
                     oldp = html.escape(str(r["Old Price"]))
                     newp = html.escape(str(r["New Price"]))
                     time_ = html.escape(str(r["DateTime"]))
-
-                    # --- البحث عن SKU الأساسي + سعره في df (noon sheet) ---
-                    main_sku = ""
-                    my_price = ""
-                    try:
-                        # نبحث في صفوف df إذا كان sku المنافس موجود ضمن أي عمود
-                        match = df[df.apply(lambda row: sku in row.astype(str).values, axis=1)]
-                        if not match.empty:
-                            main_sku = match.iloc[0].get("SKU1", "")
-                            my_price = match.iloc[0].get("Price1", "")
-                    except Exception:
-                        main_sku = ""
-                        my_price = ""
-                    # ---------------------------------------------------------
 
                     of = price_to_float(oldp)
                     nf = price_to_float(newp)
 
                     arrow = "➡️"
-                    if of is not None and nf is not None:
+                    if of and nf:
                         if nf > of: arrow = "🔺"
                         elif nf < of: arrow = "🔻"
 
                     cid = f"{sku}_{time_}"
 
-                    # --- كل إشعار داخل Card منسق (مطلوب) ---
                     st.markdown(f"""
                     <div onclick="localStorage.setItem('{cid}','1')"
                         style="
-                            background:#ffffff;
-                            border-left:6px solid #007bff;
+                            background:#fff;
+                            border:2px solid #ccc;
                             border-radius:10px;
-                            padding:15px;
-                            margin-bottom:15px;
-                            box-shadow:0 2px 6px rgba(0,0,0,0.12);
-                            font-size:18px;
-                        "
-                    >
-
-                        <div style="font-size:20px; font-weight:700; margin-bottom:8px;">
-                            SKU الأساسي:
-                            <span style="color:#007bff;">{main_sku}</span>
-                            — <span style="color:#28a745;">سعري: {my_price}</span>
-                        </div>
-
-                        <div style="display:flex; justify-content:space-between; align-items:center; font-size:18px; gap:15px;">
-
-                            <div style="min-width:33%; overflow:hidden; text-overflow:ellipsis;">
-                                <b>SKU المنافس:</b> {sku}
-                            </div>
-
-                            <div style="color:#555; font-size:16px; min-width:33%; text-align:center;">
-                                📅 {time_}
-                            </div>
-
-                            <div style="font-weight:700; min-width:33%; text-align:end;">
-                                {oldp} → {newp} {arrow}
-                            </div>
-
-                        </div>
-
+                            padding:10px;
+                            margin-bottom:10px;
+                            font-size:19px;
+                        ">
+                        <b>SKU:</b> {sku}<br>
+                        من: <b>{oldp}</b> → <b>{newp}</b> {arrow}<br>
+                        <span style='color:#777;'>📅 {time_}</span>
                     </div>
 
                     <script>
