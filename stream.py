@@ -96,7 +96,7 @@ def load_history():
 
     df["SKU"] = df["SKU"].astype(str)
     df["SKU_clean"] = df["SKU"].apply(clean_sku_text)
-    df["SKU_lower"] = df["SKU_clean"].str.lower().str.strip()
+    df["SKU_lower"] = df["SKU_clean"].str.lower().str.replace(" ", "")
     df["DateTime"] = pd.to_datetime(df["DateTime"], errors="coerce")
 
     return df
@@ -156,7 +156,7 @@ def price_to_float(s):
 
 
 # ====================================================================
-# 5) Streamlit UI
+# 5) UI Settings
 # ====================================================================
 st.sidebar.header("⚙️ الإعدادات")
 refresh_rate = st.sidebar.slider("⏱ معدل التحديث (ثواني)", 5, 300, 30)
@@ -167,7 +167,7 @@ last_update_placeholder = st.sidebar.empty()
 
 
 # ====================================================================
-# 6) عرض البيانات
+# 6) MAIN LOOP
 # ====================================================================
 while True:
     try:
@@ -188,16 +188,22 @@ while True:
             st.subheader("🔔 التغييرات الأخيرة (آخر 10 تغييرات)")
 
             if not df_hist.empty:
+
                 recent_changes = df_hist.sort_values("DateTime", ascending=False).head(10)
                 recent_changes = recent_changes.reset_index(drop=True)
 
+                st.markdown("""
+                <div style='max-height:450px; overflow-y:auto; direction:rtl; padding-right:10px;'>
+                """, unsafe_allow_html=True)
+
                 for idx, change in recent_changes.iterrows():
+
                     old_p = change["Old Price"]
                     new_p = change["New Price"]
                     sku = change["SKU"]
                     time_c = change["DateTime"]
+                    change_id = f"{sku}_{time_c}"
 
-                    # اتجاه السعر
                     try:
                         of = float(str(old_p).replace(",", "").replace("SAR", ""))
                         nf = float(str(new_p).replace(",", "").replace("SAR", ""))
@@ -205,30 +211,67 @@ while True:
                     except:
                         arrow = "➡️"
 
-                    # 🔥 أول تغيير = أحمر
-                    if idx == 0:
-                        bg = "#ffdddd"
-                        border_color = "#ff4444"
-                    else:
-                        bg = "#ffffff"
-                        border_color = "#ddd"
+                    bg = "#ffdddd" if idx == 0 else "#ffffff"
+                    border_color = "#ff4444" if idx == 0 else "#dddddd"
 
                     st.markdown(f"""
-                    <div style='
-                        background:{bg};
-                        padding:15px;
-                        border-radius:10px;
-                        margin-bottom:10px;
-                        border:2px solid {border_color};
-                        width:60%;
-                        font-size:20px;
-                        direction:rtl;
-                    '>
+                    <div id="{change_id}" onclick="markSeen('{change_id}')"
+                        style='
+                            background:{bg};
+                            padding:15px;
+                            border-radius:10px;
+                            margin-bottom:10px;
+                            border:2px solid {border_color};
+                            width:95%;
+                            font-size:20px;
+                            cursor:pointer;
+                            direction:rtl;
+                        '>
+
                         <b>SKU:</b> {sku}<br>
-                        <b>من:</b> {old_p}  →  <b>إلى:</b> {new_p} {arrow}<br>
+                        <b>من:</b> {old_p} → <b>إلى:</b> {new_p} {arrow}<br>
                         <span style='color:#666;'>📅 {time_c}</span>
                     </div>
+
+                    <script>
+
+                    function playAlertSound() {{
+                        var audio = new Audio('/beep.mp3');
+                        audio.volume = 1.0;
+                        audio.play();
+                    }}
+
+                    document.addEventListener("DOMContentLoaded", function() {{
+                        let id = "{change_id}";
+                        let seen = localStorage.getItem(id);
+
+                        // لو هو التغيير الأحدث وغير مقروء → شغّل الصوت
+                        if ({idx} === 0 && seen !== "seen") {{
+                            playAlertSound();
+                        }}
+
+                        // لو مقروء → رجعه أبيض
+                        if (seen === "seen") {{
+                            let c = document.getElementById(id);
+                            if (c) {{
+                                c.style.background = "#ffffff";
+                                c.style.borderColor = "#dddddd";
+                            }}
+                        }}
+                    }});
+
+                    function markSeen(id) {{
+                        localStorage.setItem(id, "seen");
+                        let c = document.getElementById(id);
+                        if (c) {{
+                            c.style.background = "#ffffff";
+                            c.style.borderColor = "#dddddd";
+                        }}
+                    }}
+                    </script>
                     """, unsafe_allow_html=True)
+
+                st.markdown("</div>", unsafe_allow_html=True)
 
             else:
                 st.info("لا يوجد أي تغييرات مسجلة بعد.")
@@ -341,12 +384,8 @@ while True:
                 </div>
                 """
 
-                # 🔥 الإطار الكبير — يظهر المحتوى كامل بدون قصّ
                 components.html(html_card, height=1300, scrolling=False)
 
-        # ============================
-        #    توقيت السعودية
-        # ============================
         ksa_time = datetime.utcnow() + timedelta(hours=3)
         last_update_placeholder.markdown(
             f"🕒 آخر تحديث (KSA): **{ksa_time.strftime('%Y-%m-%d %H:%M:%S')}**"
