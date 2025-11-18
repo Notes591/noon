@@ -179,7 +179,7 @@ while True:
                     ("المنافس 5", "SKU6", "Price6", "Nudge6"),
                 ]
 
-                # =========== كارت المنتج (شكل مصغّر) ============
+                # =========== كارت المنتج ============
                 html = f"""
                 <div style="
                     border:1px solid #e3e3e3;
@@ -192,35 +192,19 @@ while True:
                     box-shadow:0 1px 4px rgba(0,0,0,0.05);
                 ">
 
-                    <h2 style="
-                        font-size:20px;
-                        margin-bottom:10px;
-                        color:#333;
-                    ">
+                    <h2 style="font-size:20px; margin-bottom:10px; color:#333;">
                         📦 <b>SKU الأساسي:</b>
                         <span style="color:#007bff;">{sku_main}</span>
                     </h2>
 
-                    <h3 style="
-                        font-size:16px;
-                        margin:5px 0 12px 0;
-                        color:#555;
-                    ">
+                    <h3 style="font-size:16px; margin:5px 0 12px 0; color:#555;">
                         🏷️ <b>الأسعار + آخر تغيير + النودجز:</b>
                     </h3>
 
-                    <ul style="
-                        font-size:15px;
-                        line-height:1.6;
-                        list-style:none;
-                        padding:0;
-                        margin:0;
-                    ">
+                    <ul style="font-size:15px; line-height:1.6; list-style:none; padding:0; margin:0;">
                 """
 
-                # ===================================================
-                #  LOOP على منتجك + 5 منافسين
-                # ===================================================
+                # LOOP على المنافسين
                 for label, sku_col, price_col, nudge_col in sku_list:
 
                     sku_val = row.get(sku_col, "")
@@ -248,13 +232,8 @@ while True:
                         else:
                             change_html = "<div style='font-size:12px; color:#777;'>لا يوجد تغييرات مسجلة</div>"
 
-                    # ============ شكل العنصر ============
                     html += f"""
-                        <li style="
-                            margin-bottom:12px;
-                            padding-bottom:10px;
-                            border-bottom:1px solid #f0f0f0;
-                        ">
+                        <li style="margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid #f0f0f0;">
                             <div style="font-size:15px; font-weight:bold; color:#222;">
                                 {label} <span style="color:#888; font-weight:normal;">({sku_val})</span>
                             </div>
@@ -273,7 +252,9 @@ while True:
                     """
 
                 html += "</ul></div>"
-                components.html(html, height=None, scrolling=True)
+
+                # حذف السكروول — عرض كامل
+                components.html(html, scrolling=False)
 
         last_update_placeholder.markdown(
             f"🕒 آخر تحديث: **{time.strftime('%Y-%m-%d %H:%M:%S')}**"
