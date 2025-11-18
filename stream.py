@@ -86,7 +86,7 @@ def load_history():
 
     df = pd.DataFrame(data[1:], columns=data[0])
 
-    # تنظيف SKU بطريقة صحيحة
+    # تنظيف SKU
     df["SKU"] = df["SKU"].astype(str)
     df["SKU_clean"] = df["SKU"].apply(clean_sku_text)
     df["SKU_lower"] = df["SKU_clean"].str.lower().str.strip()
@@ -191,18 +191,23 @@ while True:
                     else:
                         nudge_show = "-"
 
-                    # آخر تغيير
-                    change_data = get_last_change(df_hist, sku_val)
-
-                    if change_data:
-                        change_html = f"""
-                        <div style="font-size:14px; margin-top:3px;">
-                            🔄 <b>آخر تغيير:</b> {change_data['old']} → {change_data['new']}
-                            <br>📅 <b>الوقت:</b> {change_data['time']}
-                        </div>
-                        """
+                    # ===============================
+                    # هنا التعديل المهم:
+                    # SKU1 لن نعرض له أي تغييرات
+                    # ===============================
+                    if sku_col == "SKU1":
+                        change_html = ""   # إخفاء تام
                     else:
-                        change_html = "<div style='font-size:13px; color:#777;'>لا يوجد تغييرات مسجلة</div>"
+                        change_data = get_last_change(df_hist, sku_val)
+                        if change_data:
+                            change_html = f"""
+                            <div style="font-size:14px; margin-top:3px;">
+                                🔄 <b>آخر تغيير:</b> {change_data['old']} → {change_data['new']}
+                                <br>📅 <b>الوقت:</b> {change_data['time']}
+                            </div>
+                            """
+                        else:
+                            change_html = "<div style='font-size:13px; color:#777;'>لا يوجد تغييرات مسجلة</div>"
 
                     html += f"""
                         <li>
