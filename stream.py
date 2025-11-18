@@ -10,7 +10,7 @@ import streamlit.components.v1 as components
 import re
 
 # إعداد صفحة Streamlit
-st.set_page_config(page_title="Noon Prices Dashboard", layout="wide")
+st.set_page_config(page_title="Noon Prices – Live Monitoring Dashboard", layout="wide")
 st.title("📊 Noon Prices – Live Monitoring Dashboard")
 
 # ====================================================================
@@ -51,7 +51,6 @@ def load_sheet():
     data = ws.get_all_values()
     df = pd.DataFrame(data[1:], columns=data[0])
 
-    # 🔥 تنظيف أسماء الأعمدة بالكامل
     df.columns = (
         df.columns
         .str.strip()
@@ -88,7 +87,6 @@ def load_history():
 
     df = pd.DataFrame(data[1:], columns=data[0])
 
-    # 🔥 تنظيف أسماء الأعمدة هنا أيضاً
     df.columns = (
         df.columns
         .str.strip()
@@ -114,28 +112,24 @@ def get_last_change(df_hist, sku):
     if not sku_clean:
         return None
 
-    # (1) تطابق كامل
     rows = df_hist[df_hist["SKU_lower"] == sku_clean]
     if not rows.empty:
         rows = rows.sort_values("DateTime")
         last = rows.iloc[-1]
         return {"old": last["Old Price"], "new": last["New Price"], "change": last["Change"], "time": str(last["DateTime"])}
 
-    # (2) يحتوي على
     rows = df_hist[df_hist["SKU_lower"].str.contains(sku_clean)]
     if not rows.empty:
         rows = rows.sort_values("DateTime")
         last = rows.iloc[-1]
         return {"old": last["Old Price"], "new": last["New Price"], "change": last["Change"], "time": str(last["DateTime"])}
 
-    # (3) يبدأ بـ
     rows = df_hist[df_hist["SKU_lower"].str.startswith(sku_clean[:6])]
     if not rows.empty:
         rows = rows.sort_values("DateTime")
         last = rows.iloc[-1]
         return {"old": last["Old Price"], "new": last["New Price"], "change": last["Change"], "time": str(last["DateTime"])}
 
-    # (4) ينتهي بـ
     rows = df_hist[df_hist["SKU_lower"].str.endswith(sku_clean[-6:])]
     if not rows.empty:
         rows = rows.sort_values("DateTime")
@@ -185,15 +179,43 @@ while True:
                     ("المنافس 5", "SKU6", "Price6", "Nudge6"),
                 ]
 
+                # =========== كارت المنتج (شكل جديد فقط) ============
                 html = f"""
-                <div style="border:1px solid #ccc; padding:20px; border-radius:12px;
-                            margin-bottom:20px; background:#fff; direction:rtl;">
-                    <h2>📦 <b>SKU الأساسي:</b>
+                <div style="
+                    border:1px solid #d9d9d9;
+                    padding:25px;
+                    border-radius:14px;
+                    margin-bottom:25px;
+                    background:#ffffff;
+                    direction:rtl;
+                    box-shadow:0 2px 8px rgba(0,0,0,0.05);
+                    width:95%;
+                ">
+
+                    <h2 style="
+                        font-size:26px;
+                        margin-bottom:15px;
+                        color:#333;
+                    ">
+                        📦 <b>SKU الأساسي:</b>
                         <span style="color:#007bff;">{sku_main}</span>
                     </h2>
 
-                    <h3>🏷️ <b>الأسعار + آخر تغيير + النودجز:</b></h3>
-                    <ul style="font-size:18px; line-height:1.9; list-style:none; padding:0;">
+                    <h3 style="
+                        font-size:20px;
+                        margin:10px 0 20px 0;
+                        color:#444;
+                    ">
+                        🏷️ <b>الأسعار + آخر تغيير + النودجز:</b>
+                    </h3>
+
+                    <ul style="
+                        font-size:18px;
+                        line-height:2.0;
+                        list-style:none;
+                        padding:0;
+                        margin:0;
+                    ">
                 """
 
                 # ===================================================
@@ -201,20 +223,17 @@ while True:
                 # ===================================================
                 for label, sku_col, price_col, nudge_col in sku_list:
 
-                    # قراءة القيم بأمان
                     sku_val = row.get(sku_col, "")
                     price_val = row.get(price_col, "")
                     raw_nudge = row.get(nudge_col, "-")
 
                     sku_val = clean_sku_text(sku_val)
 
-                    # تنسيق النودجز
                     if raw_nudge and raw_nudge != "-":
                         nudge_show = " | ".join([n.strip() for n in raw_nudge.split("|") if n.strip()])
                     else:
                         nudge_show = "-"
 
-                    # المنتج الأساسي لا يعرض تغييرات
                     if sku_col == "SKU1":
                         change_html = ""
                     else:
@@ -229,18 +248,32 @@ while True:
                         else:
                             change_html = "<div style='font-size:13px; color:#777;'>لا يوجد تغييرات مسجلة</div>"
 
-                    # إضافة الكارت
+                    # ============ شكل العنصر داخل الكارت ============
                     html += f"""
-                        <li>
-                            <b>{label} ({sku_val}):</b>
-                            <span style="color:#2c3e50; font-weight:bold;">{price_val}</span><br>
-                            <span style="color:#555;">{nudge_show}</span>
+                        <li style="
+                            margin-bottom:18px;
+                            padding-bottom:15px;
+                            border-bottom:1px solid #eee;
+                        ">
+                            <div style="font-size:19px; font-weight:bold; color:#222;">
+                                {label} <span style="color:#888; font-weight:normal;">({sku_val})</span>
+                            </div>
+
+                            <div style="margin-top:5px;">
+                                💰 <b>السعر:</b>
+                                <span style="color:#2c3e50; font-weight:bold;">{price_val}</span>
+                            </div>
+
+                            <div style="color:#555; margin-top:4px;">
+                                🔔 {nudge_show}
+                            </div>
+
                             {change_html}
                         </li>
                     """
 
                 html += "</ul></div>"
-                components.html(html, height=600)
+                components.html(html, height=650)
 
         last_update_placeholder.markdown(
             f"🕒 آخر تحديث: **{time.strftime('%Y-%m-%d %H:%M:%S')}**"
