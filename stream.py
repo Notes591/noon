@@ -8,6 +8,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import streamlit.components.v1 as components
 import re
+from datetime import datetime, timedelta
 
 # إعداد صفحة Streamlit
 st.set_page_config(page_title="Noon Prices – Live Monitoring Dashboard", layout="wide")
@@ -138,16 +139,13 @@ def get_last_change(df_hist, sku):
     return None
 
 
-# تحويل نص السعر إلى float قدر الإمكان (تجاهل رموز العملة والفواصل)
 def price_to_float(s):
     if s is None:
         return None
     s = str(s).strip()
     if s == "":
         return None
-    # حذف كل شيء ما عدا الأرقام والنقطة والسالب
     cleaned = re.sub(r"[^\d\.\-]", "", s)
-    # في حال وجود أكثر من نقطة، نأخذ أول نقطتين بطريقة آمنة: نحتفظ بالأرقام والنقطة الأولى فقط
     parts = cleaned.split('.')
     if len(parts) > 2:
         cleaned = parts[0] + '.' + ''.join(parts[1:])
@@ -169,7 +167,7 @@ last_update_placeholder = st.sidebar.empty()
 
 
 # ====================================================================
-# 6) عرض البيانات + شكل الكارت الجديد مع عرض واضح للتغيير (من ... إلى ...)
+# 6) عرض البيانات
 # ====================================================================
 while True:
     try:
@@ -189,8 +187,6 @@ while True:
                 if not sku_main:
                     continue
 
-                # ----------- الكارت الجديد مع آخر تغيير + الوقت (عرض واضح "من ... إلى ...") -----------
-
                 def change_html(sku):
                     ch = get_last_change(df_hist, sku)
                     if ch:
@@ -198,7 +194,6 @@ while True:
                         new = ch.get("new", "")
                         time_str = ch.get("time", "")
 
-                        # محاولة المقارنة الرقمية لاستخراج سهم صعود/هبوط/ثبات
                         old_f = price_to_float(old)
                         new_f = price_to_float(new)
                         if old_f is not None and new_f is not None:
@@ -243,7 +238,6 @@ while True:
 
                     <ul style="font-size:16px; line-height:2; list-style:none; padding:0;">
 
-                        <!-- منتجك -->
                         <li>
                             🟦 <b>سعر منتجك:</b> {row.get("Price1","")}
                             <br>
@@ -282,8 +276,12 @@ while True:
 
                 components.html(html_card, height=540, scrolling=False)
 
+        # ============================
+        #    توقيت السعودية الحقيقي
+        # ============================
+        ksa_time = datetime.utcnow() + timedelta(hours=3)
         last_update_placeholder.markdown(
-            f"🕒 آخر تحديث: **{time.strftime('%Y-%m-%d %H:%M:%S')}**"
+            f"🕒 آخر تحديث (KSA): **{ksa_time.strftime('%Y-%m-%d %H:%M:%S')}**"
         )
 
     except Exception as e:
