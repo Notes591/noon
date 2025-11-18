@@ -138,6 +138,25 @@ def get_last_change(df_hist, sku):
     return None
 
 
+# تحويل نص السعر إلى float قدر الإمكان (تجاهل رموز العملة والفواصل)
+def price_to_float(s):
+    if s is None:
+        return None
+    s = str(s).strip()
+    if s == "":
+        return None
+    # حذف كل شيء ما عدا الأرقام والنقطة والسالب
+    cleaned = re.sub(r"[^\d\.\-]", "", s)
+    # في حال وجود أكثر من نقطة، نأخذ أول نقطتين بطريقة آمنة: نحتفظ بالأرقام والنقطة الأولى فقط
+    parts = cleaned.split('.')
+    if len(parts) > 2:
+        cleaned = parts[0] + '.' + ''.join(parts[1:])
+    try:
+        return float(cleaned)
+    except:
+        return None
+
+
 # ====================================================================
 # 5) Streamlit UI
 # ====================================================================
@@ -150,7 +169,7 @@ last_update_placeholder = st.sidebar.empty()
 
 
 # ====================================================================
-# 6) عرض البيانات + شكل الكارت الجديد
+# 6) عرض البيانات + شكل الكارت الجديد مع عرض واضح للتغيير (من ... إلى ...)
 # ====================================================================
 while True:
     try:
@@ -170,15 +189,32 @@ while True:
                 if not sku_main:
                     continue
 
-                # ----------- الكارت الجديد مع آخر تغيير + الوقت -----------
+                # ----------- الكارت الجديد مع آخر تغيير + الوقت (عرض واضح "من ... إلى ...") -----------
 
                 def change_html(sku):
                     ch = get_last_change(df_hist, sku)
                     if ch:
+                        old = ch.get("old", "")
+                        new = ch.get("new", "")
+                        time_str = ch.get("time", "")
+
+                        # محاولة المقارنة الرقمية لاستخراج سهم صعود/هبوط/ثبات
+                        old_f = price_to_float(old)
+                        new_f = price_to_float(new)
+                        if old_f is not None and new_f is not None:
+                            if new_f > old_f:
+                                arrow = "🔺"
+                            elif new_f < old_f:
+                                arrow = "🔻"
+                            else:
+                                arrow = "➡️"
+                        else:
+                            arrow = "➡️"
+
                         return f"""
                             <span style='font-size:14px; color:#444;'>
-                                🔄 {ch['old']} → {ch['new']}<br>
-                                📅 {ch['time']}
+                                🔄 من <b>{old}</b> إلى <b>{new}</b> {arrow}
+                                <br>📅 {time_str}
                             </span>
                         """
                     else:
@@ -244,7 +280,7 @@ while True:
                 </div>
                 """
 
-                components.html(html_card, height=500, scrolling=False)
+                components.html(html_card, height=540, scrolling=False)
 
         last_update_placeholder.markdown(
             f"🕒 آخر تحديث: **{time.strftime('%Y-%m-%d %H:%M:%S')}**"
