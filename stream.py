@@ -52,21 +52,35 @@ def load_history():
         return pd.DataFrame()
 
     df = pd.DataFrame(data[1:], columns=data[0])
+
+    # 🔥 أقوى تعديل: استخراج SKU حتى لو خلية Hyperlink
+    def clean_sku(x):
+        x = str(x).strip()
+        if x.startswith("=") and "HYPERLINK" in x:
+            # استخراج النص بين آخر علامتي اقتباس
+            parts = x.split('"')
+            if len(parts) >= 4:
+                return parts[-2]  # النص النهائي
+        return x
+
+    df["SKU"] = df["SKU"].apply(clean_sku)
+
     return df
 
 
-# =========== أهم نقطة: استخراج آخر تغيير لأي SKU ===========
+# =========== استخراج آخر تغيير من history ===========
 def get_last_change(df_hist, sku):
     if df_hist.empty or not sku:
         return None
 
-    # فلترة الصفوف الخاصة بـ SKU
-    rows = df_hist[df_hist["SKU"].astype(str).str.strip() == sku.strip()]
+    sku = str(sku).strip()
 
+    # فلترة السجلات
+    rows = df_hist[df_hist["SKU"].astype(str).str.strip() == sku]
     if rows.empty:
         return None
 
-    # ترتيب حسب التاريخ الأحدث
+    # ترتيب حسب الوقت
     rows["DateTime"] = pd.to_datetime(rows["DateTime"], errors="coerce")
     rows = rows.sort_values("DateTime")
 
@@ -131,13 +145,13 @@ while True:
                     <ul style="font-size:18px; line-height:1.9; list-style:none; padding:0;">
                 """
 
-                # === عرض المنافسين ودي أهم نقطة ===
+                # === عرض المنافسين ===
                 for label, sku_col, price_col in sku_list:
 
                     sku_val = str(row.get(sku_col, "")).strip()
                     price_val = row.get(price_col, "")
 
-                    # جلب آخر تغيير من history فقط
+                    # جلب آخر تغيير
                     change_data = get_last_change(df_hist, sku_val)
 
                     if change_data:
