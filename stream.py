@@ -3,6 +3,7 @@ import pandas as pd
 import time
 import gspread
 from google.oauth2.service_account import Credentials
+import streamlit.components.v1 as components
 
 # إعداد صفحة Streamlit
 st.set_page_config(
@@ -76,7 +77,7 @@ while True:
                 if sku_main == "":
                     continue
 
-                # الأسعار كما هي بدون تقطيع
+                # الأسعار كاملة بدون حذف
                 price1 = row.get("Price1", "")
                 price2 = row.get("Price2", "")
                 price3 = row.get("Price3", "")
@@ -84,7 +85,7 @@ while True:
                 price5 = row.get("Price5", "")
                 price6 = row.get("Price6", "")
 
-                st.markdown(f"""
+                html_card = f"""
                 <div style="
                     border:1px solid #cccccc;
                     padding:20px;
@@ -116,7 +117,10 @@ while True:
                         📅 <b>آخر تحديث:</b> {row.get('Last Update','')}
                     </p>
                 </div>
-                """, unsafe_allow_html=True)
+                """
+
+                # هنا الكارت لن يظهر HTML كنص أبداً
+                components.html(html_card, height=430)
 
             # الجدول الأصلي
             st.subheader("📋 الجدول الأصلي")
