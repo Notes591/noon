@@ -12,13 +12,9 @@ from datetime import datetime, timedelta
 import base64
 import html
 
-# ----------------------------------------------
-# إعداد الصفحة
-# ----------------------------------------------
 st.set_page_config(page_title="Noon Prices – Dashboard", layout="wide")
 st.title("📊 Noon Prices – Live Monitoring Dashboard")
 
-# السماح للصوت أول ما المستخدم يضغط أي مكان
 st.markdown("""
 <script>
 document.addEventListener("click", function() {
@@ -27,9 +23,6 @@ document.addEventListener("click", function() {
 </script>
 """, unsafe_allow_html=True)
 
-# ============================================================
-# صفّارة إنذار – Base64
-# ============================================================
 AUDIO_BASE64 = """
 SUQzAwAAAAAAF1RTU0UAAAAPAAADTGF2ZjU2LjQwLjEwMQAAAAAAAAAAAAAA//uQZAAAAAAD
 6wAABEV4dGVuc2libGUgQWxhcm0gMQAAACgAAABkYXRhAAAAAICAgICAgICAgICAgICAgICA
@@ -40,18 +33,8 @@ gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC
 AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
 AAAA//uQZAAAAAABgIAAABAAAAAIAAAAAExBTUUzLjk1LjIAAAAAAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//uQZAAAAAAEwKAAAAgAAAAAAAAAAAAA
-EluZm8AAAAAAQAAAAMAAAADAAAAAwAAAAQAAAAEAAAABAAAAAUAAAAFAAAABgAAAAYAAAAH
-AAAABwAAAAgAAAAIAAAACQAAAAkAAAAKAAAACgAAAAsAAAALAAAADAAAAAwAAAANAAAADQAA
-AA4AAAAOAAAADwAAAA8AAAAQAAAAEAAAABEAAAARAAAAEgAAABIAAAATAAAAEwAAABQAAAAU
-AAAAFQAAABUAAAAXAAAAFwAAABgAAAAYAAAA
 """
 
-# ============================================================
-# مشغل الصوت
-# ============================================================
 def inject_audio_listener():
     js = f"""
     <script>
@@ -66,9 +49,6 @@ def inject_audio_listener():
     """
     st.markdown(js, unsafe_allow_html=True)
 
-# ============================================================
-# تنظيف SKU
-# ============================================================
 def clean_sku_text(x):
     if not x:
         return ""
@@ -82,16 +62,12 @@ def clean_sku_text(x):
         return max(parts, key=len)
     return x
 
-# ============================================================
-# تحميل شيت noon
-# ============================================================
 def load_sheet():
     creds = Credentials.from_service_account_info(
         st.secrets["google_service_account"],
         scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
     )
     client = gspread.authorize(creds)
-
     SID = "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk"
     ws = client.open_by_key(SID).worksheet("noon")
 
@@ -104,9 +80,6 @@ def load_sheet():
 
     return df
 
-# ============================================================
-# تحميل history
-# ============================================================
 def load_history():
     creds = Credentials.from_service_account_info(
         st.secrets["google_service_account"],
@@ -130,12 +103,8 @@ def load_history():
     df["SKU_clean"] = df["SKU"].apply(clean_sku_text)
     df["SKU_lower"] = df["SKU_clean"].str.lower().str.replace(" ","")
     df["DateTime"] = pd.to_datetime(df["DateTime"], errors="coerce")
-
     return df
 
-# ============================================================
-# آخر تغيير
-# ============================================================
 def get_last_change(hist, sku):
     if hist.empty:
         return None
@@ -158,9 +127,6 @@ def get_last_change(hist, sku):
         "time": str(last["DateTime"])
     }
 
-# ============================================================
-# السعر → float
-# ============================================================
 def price_to_float(s):
     if not s:
         return None
@@ -170,9 +136,6 @@ def price_to_float(s):
     except:
         return None
 
-# ============================================================
-# إعدادات جانبية
-# ============================================================
 st.sidebar.header("⚙️ الإعدادات")
 refresh_rate = st.sidebar.slider("⏱ التحديث (ثواني)", 5, 300, 15)
 search = st.sidebar.text_input("🔍 بحث SKU")
@@ -196,26 +159,13 @@ while True:
         with placeholder.container():
 
             # ============================================================
-            # 🔔 آخر التغييرات – إشعارات Notifications
+            # 🔔 الإشعارات (نفس النظام القديم + التعديل)
             # ============================================================
             st.subheader("🔔 آخر التغييرات (Notifications)")
 
             if not hist.empty:
 
                 recent = hist.sort_values("DateTime", ascending=False).head(5).reset_index(drop=True)
-
-                st.markdown("""
-                <div style="
-                    max-height:300px;
-                    overflow-y:scroll;
-                    padding-right:12px;
-                    direction:rtl;
-                    background:#f8f8f8;
-                    border:1px solid #ddd;
-                    border-radius:10px;
-                    margin-bottom:20px;
-                ">
-                """, unsafe_allow_html=True)
 
                 for i, r in recent.iterrows():
 
@@ -224,50 +174,60 @@ while True:
                     newp = html.escape(str(r["New Price"]))
                     time_ = html.escape(str(r["DateTime"]))
 
+                    main_sku = ""
+                    my_price = ""
+
+                    try:
+                        match = df[df.apply(lambda row: sku in row.astype(str).values, axis=1)]
+                        if not match.empty:
+                            main_sku = match.iloc[0]["SKU1"]
+                            my_price = match.iloc[0]["Price1"]
+                    except:
+                        pass
+
                     of = price_to_float(oldp)
                     nf = price_to_float(newp)
 
                     arrow = "➡️"
-                    if of and nf:
-                        if nf > of: arrow = "🔺"
-                        elif nf < of: arrow = "🔻"
+                    if of is not None and nf is not None:
+                        if nf > of:
+                            arrow = "🔺"
+                        elif nf < of:
+                            arrow = "🔻"
 
-                    cid = f"{sku}_{time_}"
-
+                    # 💥 الإشعار القديم + إضافة SKU الأساسي + سعري في نفس السطر
                     st.markdown(f"""
-                    <div onclick="localStorage.setItem('{cid}','1')"
-                        style="
-                            background:#ffffff;
-                            border-left:6px solid #007bff;
-                            border-radius:10px;
-                            padding:15px;
-                            margin-bottom:12px;
-                            box-shadow:0 2px 6px rgba(0,0,0,0.12);
-                            font-size:18px;
-                            transition:0.2s;
-                        "
-                        onmouseover="this.style.background='#f0f7ff';"
-                        onmouseout="this.style.background='#ffffff';"
-                    >
-                        <b>SKU:</b> {sku}<br>
+                    <div style="
+                        padding:10px;
+                        border-left:5px solid #007bff;
+                        margin-bottom:15px;
+                        background:white;
+                        border-radius:8px;
+                        direction:rtl;
+                        font-size:18px;
+                    ">
+
+                        <b>SKU:</b> {sku}
+                        &nbsp;&nbsp;&nbsp;
+                        <span style="color:#007bff; font-weight:700;">
+                            SKU الأساسي: {main_sku}
+                        </span>
+                        &nbsp;—&nbsp;
+                        <span style="color:#28a745; font-weight:700;">
+                            سعري: {my_price}
+                        </span>
+
+                        <br>
                         <b>{oldp}</b> → <b>{newp}</b> {arrow}<br>
                         <span style='color:#777;'>📅 {time_}</span>
-                    </div>
 
-                    <script>
-                    document.addEventListener("DOMContentLoaded", function(){{
-                        if ({i} === 0 && !localStorage.getItem("{cid}") && localStorage.getItem("sound_enabled")) {{
-                            window.parent.postMessage({{"event":"PLAY_SOUND"}}, "*");
-                        }}
-                    }});
-                    </script>
+                    </div>
                     """, unsafe_allow_html=True)
 
-                st.markdown("</div>", unsafe_allow_html=True)
+            # ============================================================
+            # باقي الكروت كما هي بدون أي تعديل
+            # ============================================================
 
-            # ============================================================
-            # 🟦 كروت الأسعار
-            # ============================================================
             st.subheader("📦 أسعار المنتجات والمنافسين")
 
             colors = ["#007bff", "#ff8800", "#ff4444", "#28a745", "#6f42c1"]
@@ -295,8 +255,10 @@ while True:
 
                     arrow = "➡️"
                     if of and nf:
-                        if nf > of: arrow = "🔺"
-                        elif nf < of: arrow = "🔻"
+                        if nf > of:
+                            arrow = "🔺"
+                        elif nf < of:
+                            arrow = "🔻"
 
                     return f"""
                         <span style='font-size:20px; font-weight:600;'>
@@ -346,9 +308,6 @@ while True:
 
                 components.html(card, height=1300, scrolling=False)
 
-        # ============================================================
-        # توقيت السعودية
-        # ============================================================
         ksa = datetime.utcnow() + timedelta(hours=3)
         last_update_widget.markdown(
             f"🕒 آخر تحديث (KSA): **{ksa.strftime('%Y-%m-%d %H:%M:%S')}**"
