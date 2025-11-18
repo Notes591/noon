@@ -13,35 +13,33 @@ import re
 st.set_page_config(page_title="Noon Prices Dashboard", layout="wide")
 st.title("📊 Noon Prices – Live Monitoring Dashboard")
 
-# --------------------------------------------------------------------------------
-# 1) استخراج SKU الحقيقي بشكل صحيح — أقوى نسخة
-# --------------------------------------------------------------------------------
+# ----------------------------------------------------------------------
+# 1) تنظيف SKU الحقيقي فقط
+# ----------------------------------------------------------------------
 def clean_sku_text(x):
-    """Extract ONLY the real SKU code from any messy text."""
-    if x is None:
+    if not x:
         return ""
     x = str(x).strip()
 
-    # إزالة الحروف الخفية
     x = re.sub(r"[\u200B-\u200F\u202A-\u202E\uFEFF]", "", x)
 
-    # 1) إذا SKU داخل أقواس → نعطيه الأولوية
+    # (SKU)
     m = re.search(r"\(([A-Za-z0-9]+)\)", x)
     if m:
         return m.group(1).strip()
 
-    # 2) نبحث عن جميع المقاطع التي تحتوي على حروف + أرقام
+    # أطول كلمة حروف + أرقام = SKU
     parts = re.findall(r"[A-Za-z0-9]{8,}", x)
     if parts:
-        # نرجّح أطول مقطع = SKU الحقيقي
         parts.sort(key=len, reverse=True)
         return parts[0]
 
     return ""
 
-# --------------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 # 2) تحميل الشيت الأساسي
-# --------------------------------------------------------------------------------
+# ----------------------------------------------------------------------
 def load_sheet():
     creds = Credentials.from_service_account_info(
         st.secrets["google_service_account"],
@@ -49,22 +47,24 @@ def load_sheet():
     )
     client = gspread.authorize(creds)
 
-    SPREADSHEET_ID = "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk"
-    ws = client.open_by_key(SPREADSHEET_ID).worksheet("noon")
+    SHEET_ID = "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk"
+    ws = client.open_by_key(SHEET_ID).worksheet("noon")
 
     data = ws.get_all_values()
     df = pd.DataFrame(data[1:], columns=data[0])
 
-    # تنظيف SKU الحقيقي
-    for col in ["SKU1", "SKU2", "SKU3", "SKU4", "SKU5", "SKU6"]:
+    # تنظيف SKU للأعمدة
+    sku_cols = ["SKU1","SKU2","SKU3","SKU4","SKU5","SKU6"]
+    for col in sku_cols:
         if col in df.columns:
             df[col] = df[col].apply(clean_sku_text)
 
     return df
 
-# --------------------------------------------------------------------------------
-# 3) تحميل history + تنظيف قوي
-# --------------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
+# 3) تحميل history
+# ----------------------------------------------------------------------
 def load_history():
     creds = Credentials.from_service_account_info(
         st.secrets["google_service_account"],
@@ -72,8 +72,10 @@ def load_history():
     )
     client = gspread.authorize(creds)
 
+    SHEET_ID = "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk"
+
     try:
-        ws = client.open_by_key("1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk").worksheet("history")
+        ws = client.open_by_key(SHEET_ID).worksheet("history")
     except:
         return pd.DataFrame()
 
@@ -82,20 +84,17 @@ def load_history():
         return pd.DataFrame()
 
     df = pd.DataFrame(data[1:], columns=data[0])
-
-    # تنظيف SKU
     df["SKU"] = df["SKU"].apply(clean_sku_text)
     df["SKU_lower"] = df["SKU"].str.lower().str.strip()
-
-    # تأكيد صيغة التاريخ
     df["DateTime"] = pd.to_datetime(df["DateTime"], errors="coerce")
-
     return df
 
-# --------------------------------------------------------------------------------
-# 4) مطابقة صارمة — بدون ANY contains
-# --------------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
+# 4) دالة استخراج آخر تغيير (STRICT MATCH)
+# ----------------------------------------------------------------------
 def get_last_change(df_hist, sku):
+
     sku = clean_sku_text(sku)
     if not sku or df_hist.empty:
         return None
@@ -103,7 +102,6 @@ def get_last_change(df_hist, sku):
     sku_lower = sku.lower().strip()
 
     rows = df_hist[df_hist["SKU_lower"] == sku_lower]
-
     if rows.empty:
         return None
 
@@ -111,15 +109,16 @@ def get_last_change(df_hist, sku):
     last = rows.iloc[-1]
 
     return {
-        "old": last.get("Old Price", ""),
-        "new": last.get("New Price", ""),
-        "change": last.get("Change", ""),
-        "time": str(last.get("DateTime", "")),
+        "old": last["Old Price"],
+        "new": last["New Price"],
+        "change": last["Change"],
+        "time": str(last["DateTime"])
     }
 
-# --------------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 # 5) واجهة Streamlit
-# --------------------------------------------------------------------------------
+# ----------------------------------------------------------------------
 st.sidebar.header("⚙️ الإعدادات")
 refresh_rate = st.sidebar.slider("⏱ معدل التحديث (ثواني)", 5, 300, 30)
 search_text = st.sidebar.text_input("🔍 البحث عن SKU")
@@ -127,19 +126,21 @@ search_text = st.sidebar.text_input("🔍 البحث عن SKU")
 placeholder = st.empty()
 last_update_placeholder = st.sidebar.empty()
 
-# --------------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 # 6) عرض الصفحة
-# --------------------------------------------------------------------------------
+# ----------------------------------------------------------------------
 while True:
     try:
         df = load_sheet()
         df_hist = load_history()
 
-        # فلترة البحث
+        # الفلترة
         if search_text:
-            df = df[df.apply(lambda row: row.astype(str).str.contains(search_text, case=False).any(), axis=1)]
+            df = df[df.apply(lambda r: r.astype(str).str.contains(search_text, case=False).any(), axis=1)]
 
         with placeholder.container():
+
             st.subheader("🟦 عرض المنتجات – Cards View")
 
             for idx, row in df.iterrows():
@@ -148,13 +149,14 @@ while True:
                 if sku_main == "":
                     continue
 
+                # mapping المتوقّع (من الشيت الجديد)
                 sku_list = [
-                    ("سعر منتجك", "SKU1", "Price1"),
-                    ("المنافس 1", "SKU2", "Price2"),
-                    ("المنافس 2", "SKU3", "Price3"),
-                    ("المنافس 3", "SKU4", "Price4"),
-                    ("المنافس 4", "SKU5", "Price5"),
-                    ("المنافس 5", "SKU6", "Price6"),
+                    ("سعر منتجك", "SKU1", "Price1", "Nudge1"),
+                    ("المنافس 1", "SKU2", "Price2", "Nudge2"),
+                    ("المنافس 2", "SKU3", "Price3", "Nudge3"),
+                    ("المنافس 3", "SKU4", "Price4", "Nudge4"),
+                    ("المنافس 4", "SKU5", "Price5", "Nudge5"),
+                    ("المنافس 5", "SKU6", "Price6", "Nudge6"),
                 ]
 
                 html = f"""
@@ -164,42 +166,41 @@ while True:
                         <span style="color:#007bff;">{sku_main}</span>
                     </h2>
 
-                    <h3>🏷️ <b>الأسعار + آخر تغيير لكل SKU:</b></h3>
-
+                    <h3>🏷️ <b>الأسعار + آخر تغيير + النودجز:</b></h3>
                     <ul style="font-size:18px; line-height:1.9; list-style:none; padding:0;">
                 """
 
-                for label, sku_col, price_col in sku_list:
+                for label, sku_col, price_col, nudge_col in sku_list:
 
-                    # أخذ القيمة الخام وتنظيفها
-                    sku_val_raw = row.get(sku_col, "")
-                    sku_val = clean_sku_text(sku_val_raw)
+                    sku_val = clean_sku_text(row.get(sku_col, ""))
                     price_val = row.get(price_col, "")
+                    nudge_val = row.get(nudge_col, "-")
 
-                    # جلب آخر تغيير
                     change_data = get_last_change(df_hist, sku_val)
 
                     if change_data:
                         change_html = f"""
-                        <div style='font-size:15px; margin-top:2px;'>
+                        <div style="font-size:14px; margin-top:3px;">
                             🔄 <b>آخر تغيير:</b> {change_data['old']} → {change_data['new']}
                             <br>📅 <b>الوقت:</b> {change_data['time']}
                         </div>
                         """
                     else:
-                        change_html = "<div style='font-size:14px; color:#888;'>لا يوجد تغييرات مسجلة</div>"
+                        change_html = "<div style='font-size:13px; color:#777;'>لا يوجد تغييرات مسجلة</div>"
 
-                    # عرض SKU المنظّف وليس الخام
                     html += f"""
                         <li>
-                            <b>{label} ({sku_val}):</b> {price_val}
+                            <b>{label} ({sku_val}):</b>
+                            <span style="color:#2c3e50; font-weight:bold;">{price_val}</span>
+                            <br>
+                            <span style="color:#555;">{nudge_val}</span>
                             {change_html}
                         </li>
                     """
 
                 html += "</ul></div>"
 
-                components.html(html, height=540)
+                components.html(html, height=580)
 
         last_update_placeholder.markdown(
             f"🕒 آخر تحديث: **{time.strftime('%Y-%m-%d %H:%M:%S')}**"
