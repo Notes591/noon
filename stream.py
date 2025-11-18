@@ -162,7 +162,7 @@ while True:
 
                     <h3 style="margin:10px 0; font-size:20px;">🏷️ <b>الأسعار + آخر تغيير:</b></h3>
 
-                    <ul style="font-size:18px; line-height:1.6; list-style:none; padding:0;">
+                    <ul style="font-size:18px; line-height:1.9; list-style:none; padding:0;">
                 """
 
                 # --------- loop competitors + history ---------
@@ -182,7 +182,7 @@ while True:
                         change_html = "<div style='font-size:14px; color:#888;'>لا يوجد تغييرات مسجلة</div>"
 
                     html += f"""
-                        <li style="margin-bottom:10px;">
+                        <li>
                             <b>{label} ({sku_val}):</b> {price_val}
                             {change_html}
                         </li>
@@ -197,8 +197,7 @@ while True:
                 </div>
                 """
 
-                # ✔ بدون height — لعرض الكارت كامل بدون قصّ
-                components.html(html)
+                components.html(html, height=480)
 
             # ---------------------------------------------------
             #                   الجدول الأصلي
