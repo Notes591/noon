@@ -103,7 +103,7 @@ def load_history():
 
 
 # ====================================================================
-# 4) Smart Matching + جلب آخر تغيير (مع تنسيق كبير)
+# 4) Smart Matching + جلب آخر تغيير + تنسيق كبير
 # ====================================================================
 def get_last_change(df_hist, sku):
     if df_hist.empty:
@@ -167,7 +167,7 @@ last_update_placeholder = st.sidebar.empty()
 
 
 # ====================================================================
-# 6) عرض البيانات + Auto Height للكروت
+# 6) عرض البيانات — **الكارت الكبير بدون قصّ**
 # ====================================================================
 while True:
     try:
@@ -187,7 +187,7 @@ while True:
                 if not sku_main:
                     continue
 
-                # ------------ تكبير تفاصيل التغيير ------------
+                # --- تفاصيل التغيير بخط كبير ---
                 def change_html(sku):
                     ch = get_last_change(df_hist, sku)
                     if ch:
@@ -215,7 +215,6 @@ while True:
                                 <span style='font-size:18px; color:#444;'>📅 {time_str}</span>
                             </span>
                         """
-
                     return "<span style='font-size:16px; color:#777;'>لا يوجد تغييرات</span>"
 
                 # ---------------- الكارت ----------------
@@ -287,26 +286,8 @@ while True:
                 </div>
                 """
 
-                # ---------------- AUTO HEIGHT FRAME ----------------
-                auto_html = f"""
-                <html>
-                <head>
-                <script>
-                function sendHeight() {{
-                    const height = document.body.scrollHeight;
-                    window.parent.postMessage({{ "frameHeight": height }}, "*");
-                }}
-                window.onload = sendHeight;
-                window.onresize = sendHeight;
-                </script>
-                </head>
-                <body style="margin:0;padding:0;">
-                {html_card}
-                </body>
-                </html>
-                """
-
-                components.html(auto_html, height=200, scrolling=False)
+                # 🔥 الإطار الكبير — يظهر المحتوى كامل بدون قصّ
+                components.html(html_card, height=1300, scrolling=False)
 
         # ============================
         #    توقيت السعودية
