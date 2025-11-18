@@ -63,6 +63,25 @@ def load_history():
     return df
 
 
+# استخراج آخر تغيير لسكيو
+def get_last_change(df_hist, sku):
+    if df_hist.empty:
+        return None
+
+    rows = df_hist[df_hist["SKU"] == sku]
+    if rows.empty:
+        return None
+
+    last = rows.tail(1).iloc[0]
+
+    return {
+        "old": last["Old Price"],
+        "new": last["New Price"],
+        "change": last["Change"],
+        "time": last["DateTime"]
+    }
+
+
 # Sidebar
 st.sidebar.header("⚙️ الإعدادات")
 
@@ -92,7 +111,7 @@ def highlight_changes(val):
 while True:
     try:
         df = load_sheet()
-        df_hist = load_history()  # <<< تم إضافة تحميل سجل التغييرات
+        df_hist = load_history()
 
         if search_text:
             df = df[df.apply(lambda row: row.astype(str).str.contains(search_text, case=False).any(), axis=1)]
@@ -113,14 +132,18 @@ while True:
                 if sku_main == "":
                     continue
 
-                price1 = row.get("Price1", "")
-                price2 = row.get("Price2", "")
-                price3 = row.get("Price3", "")
-                price4 = row.get("Price4", "")
-                price5 = row.get("Price5", "")
-                price6 = row.get("Price6", "")
+                # الأسعار
+                sku_list = [
+                    ("سعر منتجك", "SKU1", "Price1"),
+                    ("المنافس 1", "SKU2", "Price2"),
+                    ("المنافس 2", "SKU3", "Price3"),
+                    ("المنافس 3", "SKU4", "Price4"),
+                    ("المنافس 4", "SKU5", "Price5"),
+                    ("المنافس 5", "SKU6", "Price6"),
+                ]
 
-                html_card = f"""
+                # ------------------------ HTML CARD ------------------------
+                html = f"""
                 <div style="
                     border:1px solid #cccccc;
                     padding:20px;
@@ -137,15 +160,35 @@ while True:
 
                     <div style="height:1px; background:#ddd; margin:10px 0;"></div>
 
-                    <h3 style="margin:10px 0; font-size:20px;">🏷️ <b>الأسعار:</b></h3>
+                    <h3 style="margin:10px 0; font-size:20px;">🏷️ <b>الأسعار + آخر تغيير:</b></h3>
 
                     <ul style="font-size:18px; line-height:1.9; list-style:none; padding:0;">
-                        <li>🟦 <b>سعر منتجك:</b> {price1}</li>
-                        <li>🟨 <b>المنافس 1 ({row.get('SKU2','')}):</b> {price2}</li>
-                        <li>🟧 <b>المنافس 2 ({row.get('SKU3','')}):</b> {price3}</li>
-                        <li>🟥 <b>المنافس 3 ({row.get('SKU4','')}):</b> {price4}</li>
-                        <li>🟩 <b>المنافس 4 ({row.get('SKU5','')}):</b> {price5}</li>
-                        <li>🟪 <b>المنافس 5 ({row.get('SKU6','')}):</b> {price6}</li>
+                """
+
+                # --------- loop competitors + history ---------
+                for label, sku_col, price_col in sku_list:
+                    sku_val = row.get(sku_col, "")
+                    price_val = row.get(price_col, "")
+
+                    change_data = get_last_change(df_hist, sku_val)
+                    if change_data:
+                        change_html = f"""
+                        <div style='font-size:15px; margin-top:3px; color:#555;'>
+                            🔄 <b>آخر تغيير:</b> {change_data['old']} → {change_data['new']}  
+                            <br>📅 <b>الوقت:</b> {change_data['time']}
+                        </div>
+                        """
+                    else:
+                        change_html = "<div style='font-size:14px; color:#888;'>لا يوجد تغييرات مسجلة</div>"
+
+                    html += f"""
+                        <li>
+                            <b>{label} ({sku_val}):</b> {price_val}
+                            {change_html}
+                        </li>
+                    """
+
+                html += f"""
                     </ul>
 
                     <p style="margin-top:15px; font-size:16px;">
@@ -154,7 +197,7 @@ while True:
                 </div>
                 """
 
-                components.html(html_card, height=430)
+                components.html(html, height=480)
 
             # ---------------------------------------------------
             #                   الجدول الأصلي
@@ -163,9 +206,9 @@ while True:
             st.dataframe(styled_df, use_container_width=True)
 
             # ---------------------------------------------------
-            #               جدول سجل التغييرات history
+            #                   جدول history
             # ---------------------------------------------------
-            st.subheader("📉 سجل تغييرات الأسعار – Price Change History")
+            st.subheader("📉 سجل تغييرات الأسعار – History")
 
             if df_hist.empty:
                 st.info("لا يوجد تغييرات مسجلة حتى الآن.")
