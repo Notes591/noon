@@ -40,6 +40,13 @@ gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC
 AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
 AAAA//uQZAAAAAABgIAAABAAAAAIAAAAAExBTUUzLjk1LjIAAAAAAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//uQZAAAAAAEwKAAAAgAAAAAAAAAAAAA
+EluZm8AAAAAAQAAAAMAAAADAAAAAwAAAAQAAAAEAAAABAAAAAUAAAAFAAAABgAAAAYAAAAH
+AAAABwAAAAgAAAAIAAAACQAAAAkAAAAKAAAACgAAAAsAAAALAAAADAAAAAwAAAANAAAADQAA
+AA4AAAAOAAAADwAAAA8AAAAQAAAAEAAAABEAAAARAAAAEgAAABIAAAATAAAAEwAAABQAAAAU
+AAAAFQAAABUAAAAXAAAAFwAAABgAAAAYAAAA
 """
 
 # ============================================================
@@ -189,13 +196,26 @@ while True:
         with placeholder.container():
 
             # ============================================================
-            # 🔔 الإشعارات — النظام القديم + التعديل الصحيح
+            # 🔔 آخر التغييرات – إشعارات Notifications
             # ============================================================
             st.subheader("🔔 آخر التغييرات (Notifications)")
 
             if not hist.empty:
 
                 recent = hist.sort_values("DateTime", ascending=False).head(5).reset_index(drop=True)
+
+                st.markdown("""
+                <div style="
+                    max-height:300px;
+                    overflow-y:scroll;
+                    padding-right:12px;
+                    direction:rtl;
+                    background:#f8f8f8;
+                    border:1px solid #ddd;
+                    border-radius:10px;
+                    margin-bottom:20px;
+                ">
+                """, unsafe_allow_html=True)
 
                 for i, r in recent.iterrows():
 
@@ -204,58 +224,49 @@ while True:
                     newp = html.escape(str(r["New Price"]))
                     time_ = html.escape(str(r["DateTime"]))
 
-                    main_sku = ""
-                    my_price = ""
-
-                    try:
-                        match = df[df.apply(lambda row: sku in row.astype(str).values, axis=1)]
-                        if not match.empty:
-                            main_sku = match.iloc[0]["SKU1"]
-                            my_price = match.iloc[0]["Price1"]
-                    except:
-                        pass
-
                     of = price_to_float(oldp)
                     nf = price_to_float(newp)
 
                     arrow = "➡️"
-                    if of is not None and nf is not None:
-                        if nf > of:
-                            arrow = "🔺"
-                        elif nf < of:
-                            arrow = "🔻"
+                    if of and nf:
+                        if nf > of: arrow = "🔺"
+                        elif nf < of: arrow = "🔻"
 
-                    # 🎯 — الحل النهائي: HTML لا يظهر كنص
-                    html_block = f"""
-                    <div style="padding:10px; border-left:5px solid #007bff; margin-bottom:15px; background:white; border-radius:8px; direction:rtl; font-size:18px;">
+                    cid = f"{sku}_{time_}"
 
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <div>
-                                <b>SKU:</b> {sku}
-                            </div>
-
-                            <div style="font-weight:700;">
-                                <span style="color:#007bff;">SKU الأساسي: {main_sku}</span>
-                                —
-                                <span style="color:#28a745;">سعري: {my_price}</span>
-                            </div>
-                        </div>
-
-                        <div style="font-size:20px; font-weight:700; margin-top:5px;">
-                            {oldp} → {newp} {arrow}
-                        </div>
-
-                        <div style="color:#777;">
-                            📅 {time_}
-                        </div>
-
+                    st.markdown(f"""
+                    <div onclick="localStorage.setItem('{cid}','1')"
+                        style="
+                            background:#ffffff;
+                            border-left:6px solid #007bff;
+                            border-radius:10px;
+                            padding:15px;
+                            margin-bottom:12px;
+                            box-shadow:0 2px 6px rgba(0,0,0,0.12);
+                            font-size:18px;
+                            transition:0.2s;
+                        "
+                        onmouseover="this.style.background='#f0f7ff';"
+                        onmouseout="this.style.background='#ffffff';"
+                    >
+                        <b>SKU:</b> {sku}<br>
+                        <b>{oldp}</b> → <b>{newp}</b> {arrow}<br>
+                        <span style='color:#777;'>📅 {time_}</span>
                     </div>
-                    """
 
-                    st.markdown(html_block, unsafe_allow_html=True)
+                    <script>
+                    document.addEventListener("DOMContentLoaded", function(){{
+                        if ({i} === 0 && !localStorage.getItem("{cid}") && localStorage.getItem("sound_enabled")) {{
+                            window.parent.postMessage({{"event":"PLAY_SOUND"}}, "*");
+                        }}
+                    }});
+                    </script>
+                    """, unsafe_allow_html=True)
+
+                st.markdown("</div>", unsafe_allow_html=True)
 
             # ============================================================
-            # 🟦 كروت الأسعار (بدون تغيير)
+            # 🟦 كروت الأسعار
             # ============================================================
             st.subheader("📦 أسعار المنتجات والمنافسين")
 
@@ -284,10 +295,8 @@ while True:
 
                     arrow = "➡️"
                     if of and nf:
-                        if nf > of:
-                            arrow = "🔺"
-                        elif nf < of:
-                            arrow = "🔻"
+                        if nf > of: arrow = "🔺"
+                        elif nf < of: arrow = "🔻"
 
                     return f"""
                         <span style='font-size:20px; font-weight:600;'>
