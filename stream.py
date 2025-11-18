@@ -46,7 +46,7 @@ def load_sheet():
     return df
 
 
-# ================== تحميل شيت history (الإصدار الإصلاحي الكامل) ==================
+# ================== تحميل شيت history ==================
 def load_history():
     creds = Credentials.from_service_account_info(
         st.secrets["google_service_account"],
@@ -67,7 +67,7 @@ def load_history():
 
     df = pd.DataFrame(data[1:], columns=data[0])
 
-    # استخراج النص من hyperlink
+    # استخراج النص من hyperlink إن وجد
     def extract_hyperlink_text(x):
         x = str(x).strip()
         if x.startswith("=") and "HYPERLINK" in x.upper():
@@ -89,7 +89,7 @@ def load_history():
     return df
 
 
-# =========== استخراج آخر تغيير من history (مطابقة شديدة الذكاء) ===========
+# =========== استخراج آخر تغيير من history ===========
 def get_last_change(df_hist, sku):
     if df_hist.empty or not sku:
         return None
@@ -101,16 +101,16 @@ def get_last_change(df_hist, sku):
     # 1) تطابق مباشر
     rows = df_hist[df_hist["SKU_lower"] == sku_lower]
 
-    # 2) تطابق على النسخة الموجزة (بدون رموز)
+    # 2) تطابق مبسط
     if rows.empty:
         rows = df_hist[df_hist["SKU_canon"] == sku_canon]
 
-    # 3) تطابق احتوائي (contains)
+    # 3) contains
     if rows.empty:
         mask1 = df_hist["SKU"].str.contains(re.escape(sku_clean), case=False, na=False)
         rows = df_hist[mask1]
 
-    # 4) تطابق احتوائي على النسخة الموجزة
+    # 4) contains مبسط
     if rows.empty:
         mask2 = df_hist["SKU_canon"].str.contains(sku_canon, na=False)
         rows = df_hist[mask2]
