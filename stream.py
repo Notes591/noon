@@ -21,15 +21,12 @@ def clean_sku_text(x):
         return ""
     x = str(x).strip()
 
-    # إزالة الرموز الخفية
     x = re.sub(r"[\u200B-\u200F\u202A-\u202E\uFEFF]", "", x)
 
-    # استخراج من الأقواس
     m = re.search(r"\(([A-Za-z0-9]+)\)", x)
     if m:
         return m.group(1).strip()
 
-    # أو أطول مقطع حروف+أرقام
     parts = re.findall(r"[A-Za-z0-9]{6,}", x)
     if parts:
         parts.sort(key=len, reverse=True)
@@ -39,7 +36,7 @@ def clean_sku_text(x):
 
 
 # ====================================================================
-# 2) تحميل الشيت الرئيسي
+# 2) تحميل الشيت الرئيسي + تنظيف أسماء الأعمدة
 # ====================================================================
 def load_sheet():
     creds = Credentials.from_service_account_info(
@@ -54,15 +51,22 @@ def load_sheet():
     data = ws.get_all_values()
     df = pd.DataFrame(data[1:], columns=data[0])
 
-    # تنظيف SKU1..SKU6
+    # 🔥 تنظيف أسماء الأعمدة بالكامل
+    df.columns = (
+        df.columns
+        .str.strip()
+        .str.replace(r"[\u200B-\u200F\u202A-\u202E\uFEFF]", "", regex=True)
+    )
+
     for col in ["SKU1","SKU2","SKU3","SKU4","SKU5","SKU6"]:
-        df[col] = df[col].apply(clean_sku_text)
+        if col in df.columns:
+            df[col] = df[col].apply(clean_sku_text)
 
     return df
 
 
 # ====================================================================
-# 3) تحميل history
+# 3) تحميل history + تنظيف الأعمدة
 # ====================================================================
 def load_history():
     creds = Credentials.from_service_account_info(
@@ -83,6 +87,13 @@ def load_history():
         return pd.DataFrame()
 
     df = pd.DataFrame(data[1:], columns=data[0])
+
+    # 🔥 تنظيف أسماء الأعمدة هنا أيضاً
+    df.columns = (
+        df.columns
+        .str.strip()
+        .str.replace(r"[\u200B-\u200F\u202A-\u202E\uFEFF]", "", regex=True)
+    )
 
     df["SKU"] = df["SKU"].astype(str)
     df["SKU_clean"] = df["SKU"].apply(clean_sku_text)
@@ -185,10 +196,17 @@ while True:
                     <ul style="font-size:18px; line-height:1.9; list-style:none; padding:0;">
                 """
 
+                # ===================================================
+                #  LOOP على منتجك + المنافسين
+                # ===================================================
                 for label, sku_col, price_col, nudge_col in sku_list:
-                    sku_val = clean_sku_text(row.get(sku_col, ""))
+
+                    # قراءة القيم بأمان
+                    sku_val = row.get(sku_col, "")
                     price_val = row.get(price_col, "")
                     raw_nudge = row.get(nudge_col, "-")
+
+                    sku_val = clean_sku_text(sku_val)
 
                     # تنسيق النودجز
                     if raw_nudge and raw_nudge != "-":
@@ -196,7 +214,7 @@ while True:
                     else:
                         nudge_show = "-"
 
-                    # المنتج الأساسي: لا نعرض تغييرات
+                    # المنتج الأساسي لا يعرض تغييرات
                     if sku_col == "SKU1":
                         change_html = ""
                     else:
@@ -211,6 +229,7 @@ while True:
                         else:
                             change_html = "<div style='font-size:13px; color:#777;'>لا يوجد تغييرات مسجلة</div>"
 
+                    # إضافة الكارت
                     html += f"""
                         <li>
                             <b>{label} ({sku_val}):</b>
