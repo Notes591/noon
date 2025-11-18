@@ -1,11 +1,6 @@
-import sys
-import os
-import time
-import datetime
-import re
-import traceback
 import streamlit as st
 import pandas as pd
+import time
 import gspread
 from google.oauth2.service_account import Credentials
 import streamlit.components.v1 as components
@@ -18,8 +13,7 @@ st.set_page_config(
 
 st.title("📊 Noon Prices – Live Monitoring Dashboard")
 
-
-# ================== تحميل الشيت الأساسي ==================
+# تحميل Google Sheet
 def load_sheet():
     creds = Credentials.from_service_account_info(
         st.secrets["google_service_account"],
@@ -29,57 +23,16 @@ def load_sheet():
     client = gspread.authorize(creds)
 
     SPREADSHEET_ID = "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk"
-    SHEET_NAME = "noon"
 
-    ws = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
+    ws = client.open_by_key(SPREADSHEET_ID).worksheet("noon")
     data = ws.get_all_values()
-
     df = pd.DataFrame(data[1:], columns=data[0])
-    return df
 
+    ws2 = client.open_by_key(SPREADSHEET_ID).worksheet("history")
+    hdata = ws2.get_all_values()
+    df_hist = pd.DataFrame(hdata[1:], columns=hdata[0])
 
-# ================== تحميل شيت التاريخ ==================
-def load_history():
-    creds = Credentials.from_service_account_info(
-        st.secrets["google_service_account"],
-        scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
-    )
-
-    client = gspread.authorize(creds)
-
-    SPREADSHEET_ID = "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk"
-
-    try:
-        ws = client.open_by_key(SPREADSHEET_ID).worksheet("history")
-    except:
-        return pd.DataFrame()  # لو مفيش history نرجع فاضي
-
-    data = ws.get_all_values()
-
-    if len(data) < 2:
-        return pd.DataFrame()
-
-    df = pd.DataFrame(data[1:], columns=data[0])
-    return df
-
-
-# استخراج آخر تغيير لسكيو
-def get_last_change(df_hist, sku):
-    if df_hist.empty:
-        return None
-
-    rows = df_hist[df_hist["SKU"] == sku]
-    if rows.empty:
-        return None
-
-    last = rows.tail(1).iloc[0]
-
-    return {
-        "old": last["Old Price"],
-        "new": last["New Price"],
-        "change": last["Change"],
-        "time": last["DateTime"]
-    }
+    return df, df_hist
 
 
 # Sidebar
@@ -97,7 +50,23 @@ placeholder = st.empty()
 last_update_placeholder = st.sidebar.empty()
 
 
-# تلوين الزيادة والنقصان
+# استخراج آخر تغيير للـ SKU من history
+def get_last_change(df_hist, sku):
+    if sku is None or sku.strip() == "":
+        return None
+    dfx = df_hist[df_hist["SKU"] == sku]
+    if len(dfx) == 0:
+        return None
+    last = dfx.iloc[-1]
+    return {
+        "old": last["Old Price"],
+        "new": last["New Price"],
+        "change": last["Change"],
+        "time": last["DateTime"]
+    }
+
+
+# تلوين تغييرات السعر في الجدول
 def highlight_changes(val):
     val = str(val)
     if "↑" in val:
@@ -107,23 +76,18 @@ def highlight_changes(val):
     return ""
 
 
-# =============== التحديث ==================
+# التحديث التلقائي
 while True:
     try:
-        df = load_sheet()
-        df_hist = load_history()
+        df, df_hist = load_sheet()
 
         if search_text:
             df = df[df.apply(lambda row: row.astype(str).str.contains(search_text, case=False).any(), axis=1)]
-            df_hist = df_hist[df_hist.apply(lambda row: row.astype(str).str.contains(search_text, case=False).any(), axis=1)]
 
         styled_df = df.style.applymap(highlight_changes)
 
         with placeholder.container():
 
-            # ---------------------------------------------------
-            #                     Cards View
-            # ---------------------------------------------------
             st.subheader("🟦 عرض المنتجات بطريقة الكروت – Cards View")
 
             for idx, row in df.iterrows():
@@ -133,87 +97,100 @@ while True:
                     continue
 
                 # الأسعار
-                sku_list = [
-                    ("سعر منتجك", "SKU1", "Price1"),
-                    ("المنافس 1", "SKU2", "Price2"),
-                    ("المنافس 2", "SKU3", "Price3"),
-                    ("المنافس 3", "SKU4", "Price4"),
-                    ("المنافس 4", "SKU5", "Price5"),
-                    ("المنافس 5", "SKU6", "Price6"),
+                price1 = row.get("Price1", "")
+                price2 = row.get("Price2", "")
+                price3 = row.get("Price3", "")
+                price4 = row.get("Price4", "")
+                price5 = row.get("Price5", "")
+                price6 = row.get("Price6", "")
+
+                # قائمة المنافسين
+                comp_list = [
+                    ("🟨 المنافس 1", "SKU2", "Price2"),
+                    ("🟧 المنافس 2", "SKU3", "Price3"),
+                    ("🟥 المنافس 3", "SKU4", "Price4"),
+                    ("🟩 المنافس 4", "SKU5", "Price5"),
+                    ("🟪 المنافس 5", "SKU6", "Price6"),
                 ]
 
-                # ------------------------ HTML CARD ------------------------
+                # بناء الكارت HTML
                 html = f"""
                 <div style="
                     border:1px solid #cccccc;
-                    padding:20px;
-                    border-radius:12px;
-                    margin-bottom:20px;
+                    padding:15px;
+                    border-radius:10px;
+                    margin-bottom:15px;
                     background:#ffffff;
                     direction:rtl;
                     font-family:'Tajawal', sans-serif;
+                    line-height:1.4;
+                    font-size:16px;
                 ">
-                    <h2 style="margin:0 0 10px; font-size:24px;">
+                    <h2 style="margin:0 0 5px; font-size:22px;">
                         📦 <b>الـSKU الأساسي:</b>
                         <span style="color:#007bff;">{sku_main}</span>
                     </h2>
 
-                    <div style="height:1px; background:#ddd; margin:10px 0;"></div>
+                    <div style="height:1px; background:#ddd; margin:6px 0;"></div>
 
-                    <h3 style="margin:10px 0; font-size:20px;">🏷️ <b>الأسعار + آخر تغيير:</b></h3>
+                    <h3 style="margin:5px 0; font-size:18px;">🏷️ <b>الأسعار + آخر تغيير:</b></h3>
 
-                    <ul style="font-size:18px; line-height:1.9; list-style:none; padding:0;">
+                    <ul style="font-size:16px; line-height:1.5; list-style:none; padding:0; margin:0;">
+                        <li style="margin:3px 0;">
+                            🟦 <b>سعر منتجك:</b> {price1}
                 """
 
-                # --------- loop competitors + history ---------
-                for label, sku_col, price_col in sku_list:
-                    sku_val = row.get(sku_col, "")
+                # إضافة آخر تغيير للمنتج الأساسي
+                ch = get_last_change(df_hist, sku_main)
+                if ch:
+                    html += f"""
+                    <div style='font-size:14px; margin-top:2px; color:#444;'>
+                        🔄 آخر تغيير: {ch['old']} → {ch['new']}  ({ch['change']})
+                        <br>📅 {ch['time']}
+                    </div>
+                    """
+                else:
+                    html += "<div style='font-size:13px; color:#999;'>لا يوجد تغييرات مسجلة</div>"
+
+                html += "</li>"
+
+                # المنافسين
+                for label, sku_col, price_col in comp_list:
+                    sku_val = row.get(sku_col, "").strip()
                     price_val = row.get(price_col, "")
 
-                    change_data = get_last_change(df_hist, sku_val)
-                    if change_data:
-                        change_html = f"""
-                        <div style='font-size:15px; margin-top:3px; color:#555;'>
-                            🔄 <b>آخر تغيير:</b> {change_data['old']} → {change_data['new']}  
-                            <br>📅 <b>الوقت:</b> {change_data['time']}
+                    html += f"""
+                    <li style="margin:5px 0;">
+                        {label} ({sku_val}): {price_val}
+                    """
+
+                    ch = get_last_change(df_hist, sku_val)
+                    if ch:
+                        html += f"""
+                        <div style='font-size:14px; margin-top:2px; color:#444;'>
+                            🔄 آخر تغيير: {ch['old']} → {ch['new']}  ({ch['change']})
+                            <br>📅 {ch['time']}
                         </div>
                         """
                     else:
-                        change_html = "<div style='font-size:14px; color:#888;'>لا يوجد تغييرات مسجلة</div>"
+                        html += "<div style='font-size:13px; color:#999;'>لا يوجد تغييرات مسجلة</div>"
 
-                    html += f"""
-                        <li>
-                            <b>{label} ({sku_val}):</b> {price_val}
-                            {change_html}
-                        </li>
-                    """
+                    html += "</li>"
 
                 html += f"""
                     </ul>
 
-                    <p style="margin-top:15px; font-size:16px;">
+                    <p style="margin-top:8px; font-size:14px;">
                         📅 <b>آخر تحديث:</b> {row.get('Last Update','')}
                     </p>
                 </div>
                 """
 
-                components.html(html, height=480)
+                components.html(html)
 
-            # ---------------------------------------------------
-            #                   الجدول الأصلي
-            # ---------------------------------------------------
+            # الجدول الأصلي
             st.subheader("📋 الجدول الأصلي")
             st.dataframe(styled_df, use_container_width=True)
-
-            # ---------------------------------------------------
-            #                   جدول history
-            # ---------------------------------------------------
-            st.subheader("📉 سجل تغييرات الأسعار – History")
-
-            if df_hist.empty:
-                st.info("لا يوجد تغييرات مسجلة حتى الآن.")
-            else:
-                st.dataframe(df_hist, use_container_width=True)
 
         last_update_placeholder.markdown(
             f"🕒 آخر تحديث: **{time.strftime('%Y-%m-%d %H:%M:%S')}**"
