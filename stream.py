@@ -14,7 +14,7 @@ st.set_page_config(page_title="Noon Prices Dashboard", layout="wide")
 st.title("📊 Noon Prices – Live Monitoring Dashboard")
 
 # ====================================================================
-# 1) تنظيف SKU — نفس الطريقة التي يستخدمها السكرايبر والتاريخ
+# 1) تنظيف SKU
 # ====================================================================
 def clean_sku_text(x):
     if not x:
@@ -24,12 +24,12 @@ def clean_sku_text(x):
     # إزالة الرموز الخفية
     x = re.sub(r"[\u200B-\u200F\u202A-\u202E\uFEFF]", "", x)
 
-    # استخراج SKU من الأقواس (SKU)
+    # استخراج من الأقواس
     m = re.search(r"\(([A-Za-z0-9]+)\)", x)
     if m:
         return m.group(1).strip()
 
-    # أو أطول مقطع أرقام + حروف
+    # أو أطول مقطع حروف+أرقام
     parts = re.findall(r"[A-Za-z0-9]{6,}", x)
     if parts:
         parts.sort(key=len, reverse=True)
@@ -54,17 +54,15 @@ def load_sheet():
     data = ws.get_all_values()
     df = pd.DataFrame(data[1:], columns=data[0])
 
-    # تنظيف SKU الأعمدة الستة
-    sku_cols = ["SKU1","SKU2","SKU3","SKU4","SKU5","SKU6"]
-    for col in sku_cols:
-        if col in df.columns:
-            df[col] = df[col].apply(clean_sku_text)
+    # تنظيف SKU1..SKU6
+    for col in ["SKU1","SKU2","SKU3","SKU4","SKU5","SKU6"]:
+        df[col] = df[col].apply(clean_sku_text)
 
     return df
 
 
 # ====================================================================
-# 3) تحميل history ومعالجته
+# 3) تحميل history
 # ====================================================================
 def load_history():
     creds = Credentials.from_service_account_info(
@@ -86,19 +84,16 @@ def load_history():
 
     df = pd.DataFrame(data[1:], columns=data[0])
 
-    # تنظيف SKU
     df["SKU"] = df["SKU"].astype(str)
     df["SKU_clean"] = df["SKU"].apply(clean_sku_text)
     df["SKU_lower"] = df["SKU_clean"].str.lower().str.strip()
-
-    # تحويل التاريخ
     df["DateTime"] = pd.to_datetime(df["DateTime"], errors="coerce")
 
     return df
 
 
 # ====================================================================
-# 4) استخراج آخر تغيير – الآن يعمل للمنافسين 100%
+# 4) Smart Matching للمنافسين
 # ====================================================================
 def get_last_change(df_hist, sku):
     if df_hist.empty:
@@ -108,20 +103,35 @@ def get_last_change(df_hist, sku):
     if not sku_clean:
         return None
 
+    # (1) تطابق كامل
     rows = df_hist[df_hist["SKU_lower"] == sku_clean]
+    if not rows.empty:
+        rows = rows.sort_values("DateTime")
+        last = rows.iloc[-1]
+        return {"old": last["Old Price"], "new": last["New Price"], "change": last["Change"], "time": str(last["DateTime"])}
 
-    if rows.empty:
-        return None
+    # (2) يحتوي على
+    rows = df_hist[df_hist["SKU_lower"].str.contains(sku_clean)]
+    if not rows.empty:
+        rows = rows.sort_values("DateTime")
+        last = rows.iloc[-1]
+        return {"old": last["Old Price"], "new": last["New Price"], "change": last["Change"], "time": str(last["DateTime"])}
 
-    rows = rows.sort_values("DateTime")
-    last = rows.iloc[-1]
+    # (3) يبدأ بـ
+    rows = df_hist[df_hist["SKU_lower"].str.startswith(sku_clean[:6])]
+    if not rows.empty:
+        rows = rows.sort_values("DateTime")
+        last = rows.iloc[-1]
+        return {"old": last["Old Price"], "new": last["New Price"], "change": last["Change"], "time": str(last["DateTime"])}
 
-    return {
-        "old": last["Old Price"],
-        "new": last["New Price"],
-        "change": last["Change"],
-        "time": str(last["DateTime"])
-    }
+    # (4) ينتهي بـ
+    rows = df_hist[df_hist["SKU_lower"].str.endswith(sku_clean[-6:])]
+    if not rows.empty:
+        rows = rows.sort_values("DateTime")
+        last = rows.iloc[-1]
+        return {"old": last["Old Price"], "new": last["New Price"], "change": last["Change"], "time": str(last["DateTime"])}
+
+    return None
 
 
 # ====================================================================
@@ -143,18 +153,16 @@ while True:
         df = load_sheet()
         df_hist = load_history()
 
-        # البحث
         if search_text:
             df = df[df.apply(lambda r: r.astype(str).str.contains(search_text, case=False).any(), axis=1)]
 
         with placeholder.container():
-
             st.subheader("🟦 عرض المنتجات – Cards View")
 
             for idx, row in df.iterrows():
 
-                sku_main = row.get("SKU1", "")
-                if sku_main == "":
+                sku_main = row["SKU1"]
+                if not sku_main:
                     continue
 
                 sku_list = [
@@ -178,32 +186,26 @@ while True:
                 """
 
                 for label, sku_col, price_col, nudge_col in sku_list:
-
                     sku_val = clean_sku_text(row.get(sku_col, ""))
                     price_val = row.get(price_col, "")
                     raw_nudge = row.get(nudge_col, "-")
 
-                    # إصلاح النودجز
+                    # تنسيق النودجز
                     if raw_nudge and raw_nudge != "-":
-                        nudge_show = " | ".join(
-                            [x.strip() for x in raw_nudge.split("|") if x.strip()]
-                        )
+                        nudge_show = " | ".join([n.strip() for n in raw_nudge.split("|") if n.strip()])
                     else:
                         nudge_show = "-"
 
-                    # ===============================
-                    # هنا التعديل المهم:
-                    # SKU1 لن نعرض له أي تغييرات
-                    # ===============================
+                    # المنتج الأساسي: لا نعرض تغييرات
                     if sku_col == "SKU1":
-                        change_html = ""   # إخفاء تام
+                        change_html = ""
                     else:
-                        change_data = get_last_change(df_hist, sku_val)
-                        if change_data:
+                        change = get_last_change(df_hist, sku_val)
+                        if change:
                             change_html = f"""
                             <div style="font-size:14px; margin-top:3px;">
-                                🔄 <b>آخر تغيير:</b> {change_data['old']} → {change_data['new']}
-                                <br>📅 <b>الوقت:</b> {change_data['time']}
+                                🔄 <b>آخر تغيير:</b> {change['old']} → {change['new']}
+                                <br>📅 <b>الوقت:</b> {change['time']}
                             </div>
                             """
                         else:
@@ -212,16 +214,14 @@ while True:
                     html += f"""
                         <li>
                             <b>{label} ({sku_val}):</b>
-                            <span style="color:#2c3e50; font-weight:bold;">{price_val}</span>
-                            <br>
+                            <span style="color:#2c3e50; font-weight:bold;">{price_val}</span><br>
                             <span style="color:#555;">{nudge_show}</span>
                             {change_html}
                         </li>
                     """
 
                 html += "</ul></div>"
-
-                components.html(html, height=580)
+                components.html(html, height=600)
 
         last_update_placeholder.markdown(
             f"🕒 آخر تحديث: **{time.strftime('%Y-%m-%d %H:%M:%S')}**"
