@@ -13,51 +13,67 @@ import re
 st.set_page_config(page_title="Noon Prices Dashboard", layout="wide")
 st.title("📊 Noon Prices – Live Monitoring Dashboard")
 
-
-# ============= 🔥 تنظيف أي SKU من الحروف المخفية + المسافات ============
+# ----------------------------------------------------------------------
+# 1) استخراج SKU الحقيقي بشكل صحيح 100%
+# ----------------------------------------------------------------------
 def clean_sku_text(x):
+    """Extract ONLY the real SKU code from any messy text."""
     if x is None:
         return ""
-    x = str(x)
+    x = str(x).strip()
+
+    # إزالة الحروف المخفية
     x = re.sub(r"[\u200B-\u200F\u202A-\u202E\uFEFF]", "", x)
-    return x.strip()
 
+    # 1) إذا SKU داخل أقواس → نعطيه الأولوية
+    m = re.search(r"\(([A-Za-z0-9]+)\)", x)
+    if m:
+        return m.group(1).strip()
 
-# ================== تحميل الشيت الأساسي ==================
+    # 2) نبحث عن جميع المقاطع التي تحتوي أرقام + حروف
+    parts = re.findall(r"[A-Za-z0-9]{8,}", x)
+    if parts:
+        # نرجّح أطول مقطع = هو SKU الحقيقي
+        parts.sort(key=len, reverse=True)
+        return parts[0]
+
+    return ""
+
+# ----------------------------------------------------------------------
+# 2) تحميل الشيت الأساسي
+# ----------------------------------------------------------------------
 def load_sheet():
     creds = Credentials.from_service_account_info(
         st.secrets["google_service_account"],
         scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
     )
-
     client = gspread.authorize(creds)
 
     SPREADSHEET_ID = "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk"
-    SHEET_NAME = "noon"
+    ws = client.open_by_key(SPREADSHEET_ID).worksheet("noon")
 
-    ws = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
     data = ws.get_all_values()
     df = pd.DataFrame(data[1:], columns=data[0])
-    
+
+    # تنظيف SKU
     for col in ["SKU1", "SKU2", "SKU3", "SKU4", "SKU5", "SKU6"]:
         if col in df.columns:
             df[col] = df[col].apply(clean_sku_text)
 
     return df
 
-
-# ================== تحميل شيت history ==================
+# ----------------------------------------------------------------------
+# 3) تحميل شيت history + تنظيف قوي
+# ----------------------------------------------------------------------
 def load_history():
     creds = Credentials.from_service_account_info(
         st.secrets["google_service_account"],
         scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
     )
-
     client = gspread.authorize(creds)
-    SPREADSHEET_ID = "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk"
 
     try:
-        ws = client.open_by_key(SPREADSHEET_ID).worksheet("history")
+        ws = client.open_by_key("1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk").worksheet("history")
     except:
         return pd.DataFrame()
 
@@ -67,61 +83,34 @@ def load_history():
 
     df = pd.DataFrame(data[1:], columns=data[0])
 
-    # استخراج النص من hyperlink إن وجد
-    def extract_hyperlink_text(x):
-        x = str(x).strip()
-        if x.startswith("=") and "HYPERLINK" in x.upper():
-            parts = x.split('"')
-            if len(parts) >= 4:
-                return parts[-2]
-        return x
+    # استخراج SKU الحقيقي فقط
+    df["SKU"] = df["SKU"].apply(clean_sku_text)
 
-    def canon_alnum(s):
-        if s is None:
-            return ""
-        s = str(s).lower()
-        return re.sub(r"[^0-9a-z]", "", s)
+    df["SKU_lower"] = df["SKU"].str.lower().str.strip()
 
-    df["SKU"] = df["SKU"].apply(lambda x: clean_sku_text(extract_hyperlink_text(x)))
-    df["SKU_lower"] = df["SKU"].str.strip().str.lower()
-    df["SKU_canon"] = df["SKU"].apply(canon_alnum)
+    # تنظيف وقت التاريخ
+    df["DateTime"] = pd.to_datetime(df["DateTime"], errors="coerce")
 
     return df
 
-
-# =========== استخراج آخر تغيير من history ===========
+# ----------------------------------------------------------------------
+# 4) مطابقة SKU بشكل صحيح STRICT – بدون contains
+# ----------------------------------------------------------------------
 def get_last_change(df_hist, sku):
-    if df_hist.empty or not sku:
+    """Return exact last change for EXACT SKU match ONLY."""
+    sku = clean_sku_text(sku)
+    if not sku or df_hist.empty:
         return None
 
-    sku_clean = clean_sku_text(sku)
-    sku_lower = sku_clean.lower().strip()
-    sku_canon = re.sub(r"[^0-9a-z]", "", sku_lower)
+    sku_lower = sku.lower().strip()
 
-    # 1) تطابق مباشر
+    # تطابق حقيقي فقط
     rows = df_hist[df_hist["SKU_lower"] == sku_lower]
 
-    # 2) تطابق مبسط
-    if rows.empty:
-        rows = df_hist[df_hist["SKU_canon"] == sku_canon]
-
-    # 3) contains
-    if rows.empty:
-        mask1 = df_hist["SKU"].str.contains(re.escape(sku_clean), case=False, na=False)
-        rows = df_hist[mask1]
-
-    # 4) contains مبسط
-    if rows.empty:
-        mask2 = df_hist["SKU_canon"].str.contains(sku_canon, na=False)
-        rows = df_hist[mask2]
-
     if rows.empty:
         return None
 
-    rows = rows.copy()
-    rows["DateTime"] = pd.to_datetime(rows["DateTime"], errors="coerce")
     rows = rows.sort_values("DateTime")
-
     last = rows.iloc[-1]
 
     return {
@@ -131,19 +120,19 @@ def get_last_change(df_hist, sku):
         "time": str(last.get("DateTime", ""))
     }
 
-
-# Sidebar
+# ----------------------------------------------------------------------
+# 5) واجهة Streamlit
+# ----------------------------------------------------------------------
 st.sidebar.header("⚙️ الإعدادات")
-
 refresh_rate = st.sidebar.slider("⏱ معدل التحديث (ثواني)", 5, 300, 30)
 search_text = st.sidebar.text_input("🔍 البحث عن SKU")
 
-st.sidebar.markdown("---")
 placeholder = st.empty()
 last_update_placeholder = st.sidebar.empty()
 
-
-# =============== عرض الصفحة ==================
+# ----------------------------------------------------------------------
+# 6) عرض الصفحة
+# ----------------------------------------------------------------------
 while True:
     try:
         df = load_sheet()
@@ -153,10 +142,11 @@ while True:
             df = df[df.apply(lambda row: row.astype(str).str.contains(search_text, case=False).any(), axis=1)]
 
         with placeholder.container():
-            st.subheader("🟦 عرض المنتجات بطريقة الكروت – Cards View")
+            st.subheader("🟦 عرض المنتجات – Cards View")
 
             for idx, row in df.iterrows():
-                sku_main = clean_sku_text(row.get("SKU1", ""))
+
+                sku_main = row.get("SKU1", "")
                 if sku_main == "":
                     continue
 
@@ -171,20 +161,19 @@ while True:
 
                 html = f"""
                 <div style="border:1px solid #ccc; padding:20px; border-radius:12px;
-                            margin-bottom:20px; background:#fff; direction:rtl;
-                            font-family:'Tajawal', sans-serif;">
-                    <h2>📦 <b>SKU الأساسي:</b> 
+                            margin-bottom:20px; background:#fff; direction:rtl;">
+                    <h2>📦 <b>SKU الأساسي:</b>
                         <span style="color:#007bff;">{sku_main}</span>
                     </h2>
 
-                    <h3>🏷️ <b>الأسعار + آخر تغيير:</b></h3>
+                    <h3>🏷️ <b>الأسعار + آخر تغيير لكل SKU:</b></h3>
 
                     <ul style="font-size:18px; line-height:1.9; list-style:none; padding:0;">
                 """
 
                 for label, sku_col, price_col in sku_list:
 
-                    sku_val = clean_sku_text(row.get(sku_col, ""))
+                    sku_val = row.get(sku_col, "")
                     price_val = row.get(price_col, "")
 
                     change_data = get_last_change(df_hist, sku_val)
@@ -192,7 +181,7 @@ while True:
                     if change_data:
                         change_html = f"""
                         <div style='font-size:15px; margin-top:2px;'>
-                            🔄 <b>آخر تغيير:</b> {change_data['old']} → {change_data['new']}
+                            🔄 <b>آخر تغيير:</b> {change_data['old']} → {change_data['new']}  
                             <br>📅 <b>الوقت:</b> {change_data['time']}
                         </div>
                         """
@@ -208,7 +197,7 @@ while True:
 
                 html += "</ul></div>"
 
-                components.html(html, height=520)
+                components.html(html, height=540)
 
         last_update_placeholder.markdown(
             f"🕒 آخر تحديث: **{time.strftime('%Y-%m-%d %H:%M:%S')}**"
