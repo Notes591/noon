@@ -19,6 +19,24 @@ st.set_page_config(
 st.title("📊 Noon Prices – Live Monitoring Dashboard")
 
 
+# ==========================================================
+#               تنظيف الـ SKU لضمان التطابق
+# ==========================================================
+def clean_sku(s):
+    if not isinstance(s, str):
+        return ""
+    return (
+        s.replace("\u200f", "")
+        .replace("\u200e", "")
+        .replace("\xa0", " ")
+        .strip()
+        .replace(" ", "")
+        .replace("\n", "")
+        .replace("\t", "")
+        .upper()
+    )
+
+
 # ================== تحميل الشيت الأساسي ==================
 def load_sheet():
     creds = Credentials.from_service_account_info(
@@ -63,15 +81,20 @@ def load_history():
     return df
 
 
-# استخراج آخر تغيير بناءً على SKU نفسه فقط
+# استخراج آخر تغيير بناءً على SKU الصحيح بعد التنظيف
 def get_last_change(df_hist, sku):
     if df_hist.empty:
         return None
 
-    if sku is None or sku == "" or sku == "-":
+    sku = clean_sku(sku)
+
+    if sku == "":
         return None
 
-    rows = df_hist[df_hist["SKU"] == sku]
+    df_hist["SKU_clean"] = df_hist["SKU"].apply(clean_sku)
+
+    rows = df_hist[df_hist["SKU_clean"] == sku]
+
     if rows.empty:
         return None
 
@@ -110,7 +133,9 @@ def highlight_changes(val):
     return ""
 
 
-# =============== التحديث ==================
+# ==========================================================
+#                        التحديث
+# ==========================================================
 while True:
     try:
         df = load_sheet()
@@ -131,7 +156,7 @@ while True:
 
             for idx, row in df.iterrows():
 
-                sku_main = row.get("SKU1", "").strip()
+                sku_main = clean_sku(row.get("SKU1", ""))
                 if sku_main == "":
                     continue
 
@@ -170,10 +195,9 @@ while True:
                 # --------- loop competitors + history ---------
                 for label, sku_col, price_col in sku_list:
 
-                    sku_val = str(row.get(sku_col, "")).strip()
+                    sku_val = clean_sku(str(row.get(sku_col, "")))
                     price_val = row.get(price_col, "")
 
-                    # استخراج التغيير الصحيح للمنافس
                     change_data = get_last_change(df_hist, sku_val)
 
                     if change_data:
