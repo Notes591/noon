@@ -217,7 +217,7 @@ while True:
                     newp = html.escape(str(r["New Price"]))
                     time_ = html.escape(str(r["DateTime"]))
 
-                    # --- البحث عن SKU الأساسي + سعره ---
+                    # --- ربط SKU الأساسي + السعر الخاص بك ---
                     main_sku = ""
                     my_price = ""
                     try:
@@ -239,6 +239,7 @@ while True:
 
                     cid = f"{sku}_{time_}"
 
+                    # --- تصميم الإشعار الجديد ---
                     st.markdown(f"""
                     <div onclick="localStorage.setItem('{cid}','1')"
                         style="
@@ -246,28 +247,30 @@ while True:
                             border-left:6px solid #007bff;
                             border-radius:10px;
                             padding:15px;
-                            margin-bottom:12px;
-                            box-shadow:0 2px 6px rgba(0,0,0,0.12);
+                            margin-bottom:15px;
+                            box-shadow:0 2px 6px rgba(0,0,0,0.15);
                             font-size:18px;
                         "
                     >
 
-                        <div style="font-size:20px; font-weight:700; margin-bottom:8px;">
-                            SKU الأساسي: <span style="color:#007bff;">{main_sku}</span>
+                        <div style="font-size:20px; font-weight:700; margin-bottom:10px;">
+                            SKU الأساسي:
+                            <span style="color:#007bff;">{main_sku}</span>
                             — <span style="color:#28a745;">سعري: {my_price}</span>
                         </div>
 
-                        <div style="display:flex; justify-content:space-between; align-items:center; font-size:18px; gap:15px;">
-                            
-                            <div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;
+                                    font-size:18px; gap:15px;">
+
+                            <div style="min-width:32%;">
                                 <b>SKU المنافس:</b> {sku}
                             </div>
 
-                            <div style="color:#555; font-size:16px;">
+                            <div style="color:#555; font-size:16px; min-width:32%; text-align:center;">
                                 📅 {time_}
                             </div>
 
-                            <div style="font-weight:700;">
+                            <div style="font-weight:700; min-width:32%; text-align:end;">
                                 {oldp} → {newp} {arrow}
                             </div>
 
