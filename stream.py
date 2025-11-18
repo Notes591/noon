@@ -4,19 +4,17 @@ import gspread
 from google.oauth2.service_account import Credentials
 import re
 
-
-# ==========================================
-#        CLEAN SKU
-# ==========================================
+# -------------------------
+# Clean SKU
+# -------------------------
 def clean_sku_text(txt):
     if not txt:
         return ""
     return re.sub(r"[^A-Za-z0-9\-]", "", txt)
 
-
-# ==========================================
-#     LOAD GOOGLE SHEET
-# ==========================================
+# -------------------------
+# Load Google Sheet
+# -------------------------
 def load_sheet(spreadsheet_id, sheet_name, creds):
     client = gspread.authorize(creds)
     sh = client.open_by_key(spreadsheet_id)
@@ -32,10 +30,9 @@ def load_sheet(spreadsheet_id, sheet_name, creds):
 
     return df, df_hist
 
-
-# ==========================================
-#     LAST PRICE CHANGE
-# ==========================================
+# -------------------------
+# Last Price Change
+# -------------------------
 def get_last_change(df_hist, sku):
     try:
         df = df_hist[df_hist["SKU"] == sku]
@@ -50,17 +47,12 @@ def get_last_change(df_hist, sku):
     except:
         return None
 
-
-# ==========================================
-#              STREAMLIT UI
-# ==========================================
+# -------------------------
+# Streamlit UI
+# -------------------------
 st.set_page_config(page_title="Noon Monitor", layout="wide")
 st.title("🟡 Noon Price Monitor — Stream View")
 
-
-# ==========================================
-#   USER CONFIG
-# ==========================================
 st.sidebar.title("Settings")
 
 spreadsheet_id = st.sidebar.text_input("Spreadsheet ID", "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk")
@@ -77,24 +69,25 @@ creds = Credentials.from_service_account_info(
     scopes=["https://www.googleapis.com/auth/spreadsheets"]
 )
 
-
-# ==========================================
-#         LOAD DATA
-# ==========================================
+# -------------------------
+# Load Data
+# -------------------------
 df, df_hist = load_sheet(spreadsheet_id, sheet_name, creds)
 
 if df.empty:
     st.error("No data found in sheet.")
     st.stop()
 
-
-# ==========================================
-#        SHOW PRODUCTS
-# ==========================================
+# -------------------------
+# Columns
+# -------------------------
 sku_cols = ["SKU1", "SKU2", "SKU3", "SKU4", "SKU5", "SKU6"]
 price_cols = ["Price1", "Price2", "Price3", "Price4", "Price5", "Price6"]
 nudge_cols = ["Nudge1", "Nudge2", "Nudge3", "Nudge4", "Nudge5", "Nudge6"]
 
+# -------------------------
+# Show Each Product Row
+# -------------------------
 for idx, row in df.iterrows():
 
     st.markdown(f"### 🔷 **Product Row {idx+1}**")
@@ -110,55 +103,43 @@ for idx, row in df.iterrows():
             continue
 
         price_val = row.get(price_col, "")
-        nudge_val = row.get(nudge_col, "-")
+        nudge_val_raw = row.get(nudge_col, "-")
 
-        # ================================
-        #  تنظيم النودجز + sold recently
-        # ================================
-        if nudge_val and nudge_val != "-":
-
-            parts = [x.strip() for x in nudge_val.split("|") if x.strip()]
-
-            nudge_html = "<br>".join([f"🔸 {x}" for x in parts])
-
+        # -------------------------
+        # Fix Nudge Format (same UI as your original)
+        # -------------------------
+        if nudge_val_raw and nudge_val_raw != "-":
+            nudge_clean = " | ".join(
+                [x.strip() for x in str(nudge_val_raw).split("|") if x.strip()]
+            )
         else:
-            nudge_html = "<span style='color:#777;'>— لا يوجد —</span>"
+            nudge_clean = "-"
 
-        # آخر تغيير
+        # -------------------------
+        # Last Change
+        # -------------------------
         change_data = get_last_change(df_hist, sku_val)
         if change_data:
             change_html = f"""
-            <div style="font-size:14px; margin-top:5px; color:#333;">
-                🔄 <b>التحرك الأخير:</b> {change_data['old']} → {change_data['new']}<br>
-                ⏱️ {change_data['time']}
+            <div style="font-size:13px; color:#777;">
+                🔄 آخر تغيير: {change_data['old']} → {change_data['new']}<br>
+                ⏱ {change_data['time']}
             </div>
             """
         else:
-            change_html = "<div style='color:#777;'>لا يوجد تغييرات</div>"
+            change_html = "<div style='color:#777;'>لا يوجد تغييرات مسجلة</div>"
 
-        # ================================
-        #     DISPLAY BLOCK
-        # ================================
+        # -------------------------
+        # Final Block (Same UI)
+        # -------------------------
         st.markdown(f"""
-        <div style="padding:12px; margin-bottom:12px; border-radius:10px; background:#f8f9fa;">
-        
-            <b style="font-size:18px;">🟦 المنافس {label} — {sku_val}</b><br><br>
-
-            <b>💰 السعر:</b>
-            <span style="font-size:18px; font-weight:bold; color:#2c3e50;">
-                {price_val}
-            </span>
-
-            <br><br>
-
-            <b>📌 النودجز:</b><br>
-            <div style="margin-right:10px; font-size:15px;">
-                {nudge_html}
-            </div>
-
+        <li>
+            <b>{label} ({sku_val}):</b>
+            <span style="color:#2c3e50; font-weight:bold;">{price_val}</span>
+            <br>
+            <span style="color:#555;">{nudge_clean}</span>
             {change_html}
-
-        </div>
+        </li>
         """, unsafe_allow_html=True)
 
     st.write("------")
