@@ -1,180 +1,220 @@
+import sys
+import os
+import time
+import datetime
 import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
+import streamlit.components.v1 as components
 import re
-import os
-import json
 
+# إعداد صفحة Streamlit
+st.set_page_config(page_title="Noon Prices Dashboard", layout="wide")
+st.title("📊 Noon Prices – Live Monitoring Dashboard")
 
-# ========================================================
-# CLEAN SKU
-# ========================================================
-def clean_sku_text(txt):
-    if not txt:
+# ----------------------------------------------------------------------
+# 1) تنظيف SKU الحقيقي فقط
+# ----------------------------------------------------------------------
+def clean_sku_text(x):
+    if not x:
         return ""
-    return re.sub(r"[^A-Za-z0-9\-]", "", txt).strip()
+    x = str(x).strip()
+
+    x = re.sub(r"[\u200B-\u200F\u202A-\u202E\uFEFF]", "", x)
+
+    # (SKU)
+    m = re.search(r"\(([A-Za-z0-9]+)\)", x)
+    if m:
+        return m.group(1).strip()
+
+    # أطول كلمة حروف + أرقام = SKU
+    parts = re.findall(r"[A-Za-z0-9]{6,}", x)
+    if parts:
+        parts.sort(key=len, reverse=True)
+        return parts[0]
+
+    return ""
 
 
-# ========================================================
-# LOAD GOOGLE SHEET
-# ========================================================
-def load_sheet(spreadsheet_id, sheet_name, creds):
+# ----------------------------------------------------------------------
+# 2) تحميل الشيت الأساسي
+# ----------------------------------------------------------------------
+def load_sheet():
+    creds = Credentials.from_service_account_info(
+        st.secrets["google_service_account"],
+        scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
+    )
     client = gspread.authorize(creds)
-    sh = client.open_by_key(spreadsheet_id)
 
-    # MAIN SHEET
-    ws = sh.worksheet(sheet_name)
-    df = pd.DataFrame(ws.get_all_records())
+    SHEET_ID = "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk"
+    ws = client.open_by_key(SHEET_ID).worksheet("noon")
 
-    # HISTORY SHEET
+    data = ws.get_all_values()
+    df = pd.DataFrame(data[1:], columns=data[0])
+
+    # تنظيف SKU
+    sku_cols = ["SKU1","SKU2","SKU3","SKU4","SKU5","SKU6"]
+    for col in sku_cols:
+        if col in df.columns:
+            df[col] = df[col].apply(clean_sku_text)
+
+    return df
+
+
+# ----------------------------------------------------------------------
+# 3) تحميل history
+# ----------------------------------------------------------------------
+def load_history():
+    creds = Credentials.from_service_account_info(
+        st.secrets["google_service_account"],
+        scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
+    )
+    client = gspread.authorize(creds)
+
+    SHEET_ID = "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk"
+
     try:
-        ws_hist = sh.worksheet("history")
-        df_hist = pd.DataFrame(ws_hist.get_all_records())
+        ws = client.open_by_key(SHEET_ID).worksheet("history")
     except:
-        df_hist = pd.DataFrame(columns=["SKU", "Old Price", "New Price", "Change", "DateTime"])
+        return pd.DataFrame()
 
-    # normalize SKU
-    if "SKU" in df_hist.columns:
-        df_hist["SKU_clean"] = df_hist["SKU"].astype(str).apply(clean_sku_text)
-        df_hist["SKU_lower"] = df_hist["SKU_clean"].str.lower()
-    else:
-        df_hist["SKU_lower"] = ""
+    data = ws.get_all_values()
+    if len(data) < 2:
+        return pd.DataFrame()
 
-    return df, df_hist
+    df = pd.DataFrame(data[1:], columns=data[0])
+    df["SKU"] = df["SKU"].astype(str).apply(clean_sku_text)
+    df["SKU_lower"] = df["SKU"].str.lower().str.strip()
+    df["DateTime"] = pd.to_datetime(df["DateTime"], errors="coerce")
+    return df
 
 
-# ========================================================
-# GET LAST CHANGE
-# ========================================================
+# ----------------------------------------------------------------------
+# 4) دالة استخراج آخر تغيير (Strict Matching)
+# ----------------------------------------------------------------------
 def get_last_change(df_hist, sku):
-    try:
-        sku_clean = clean_sku_text(sku).lower()
-        rows = df_hist[df_hist["SKU_lower"] == sku_clean]
 
-        if rows.empty:
-            return None
+    sku_clean = clean_sku_text(sku).lower().strip()
 
-        row = rows.iloc[-1]
-
-        return {
-            "old": row["Old Price"],
-            "new": row["New Price"],
-            "time": row["DateTime"]
-        }
-    except:
+    if not sku_clean or df_hist.empty:
         return None
 
+    match = df_hist[df_hist["SKU_lower"] == sku_clean]
 
-# ========================================================
-# STREAMLIT UI
-# ========================================================
-st.set_page_config(page_title="Noon Monitor", layout="wide")
-st.title("🟡 Noon Price Monitor — Stream View")
+    if match.empty:
+        return None
 
+    match = match.sort_values("DateTime")
+    last = match.iloc[-1]
 
-# ========================================================
-#  自动 تحميل JSON (بدون رفع)
-# ========================================================
-
-json_file = None
-for f in os.listdir("."):
-    if f.lower().endswith(".json"):
-        json_file = f
-        break
-
-if not json_file:
-    st.error("❌ لم يتم العثور على ملف JSON في نفس مجلد البرنامج.")
-    st.stop()
-
-with open(json_file, "r") as f:
-    service_data = json.load(f)
-
-creds = Credentials.from_service_account_info(
-    service_data,
-    scopes=["https://www.googleapis.com/auth/spreadsheets"]
-)
+    return {
+        "old": last["Old Price"],
+        "new": last["New Price"],
+        "change": last["Change"],
+        "time": str(last["DateTime"])
+    }
 
 
-# ========================================================
-# SETTINGS (بدون تغيير)
-# ========================================================
-spreadsheet_id = st.sidebar.text_input(
-    "Spreadsheet ID",
-    "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk"
-)
+# ----------------------------------------------------------------------
+# 5) واجهة Streamlit
+# ----------------------------------------------------------------------
+st.sidebar.header("⚙️ الإعدادات")
+refresh_rate = st.sidebar.slider("⏱ معدل التحديث (ثواني)", 5, 300, 30)
+search_text = st.sidebar.text_input("🔍 البحث عن SKU")
 
-sheet_name = st.sidebar.text_input("Sheet Name", "noon")
-
-
-# ========================================================
-# LOAD SHEET
-# ========================================================
-df, df_hist = load_sheet(spreadsheet_id, sheet_name, creds)
-
-if df.empty:
-    st.error("❌ No data found in sheet.")
-    st.stop()
+placeholder = st.empty()
+last_update_placeholder = st.sidebar.empty()
 
 
-# ========================================================
-# COLUMNS
-# ========================================================
-sku_cols = ["SKU1", "SKU2", "SKU3", "SKU4", "SKU5", "SKU6"]
-price_cols = ["Price1", "Price2", "Price3", "Price4", "Price5", "Price6"]
-nudge_cols = ["Nudge1", "Nudge2", "Nudge3", "Nudge4", "Nudge5", "Nudge6"]
+# ----------------------------------------------------------------------
+# 6) عرض الصفحة
+# ----------------------------------------------------------------------
+while True:
+    try:
+        df = load_sheet()
+        df_hist = load_history()
 
+        # الفلترة
+        if search_text:
+            df = df[df.apply(lambda r: r.astype(str).str.contains(search_text, case=False).any(), axis=1)]
 
-# ========================================================
-# DISPLAY
-# ========================================================
-for idx, row in df.iterrows():
+        with placeholder.container():
 
-    st.markdown(f"### 🔷 **Product Row {idx+1}**")
-    st.write("---")
+            st.subheader("🟦 عرض المنتجات – Cards View")
 
-    for label, sku_col, price_col, nudge_col in zip(
-        ["A", "B", "C", "D", "E", "F"],
-        sku_cols, price_cols, nudge_cols
-    ):
+            for idx, row in df.iterrows():
 
-        sku_val = clean_sku_text(row.get(sku_col, ""))
-        if not sku_val:
-            continue
+                sku_main = row.get("SKU1", "")
+                if sku_main == "":
+                    continue
 
-        price_val = row.get(price_col, "")
-        raw_nudge = row.get(nudge_col, "-")
+                sku_list = [
+                    ("سعر منتجك", "SKU1", "Price1", "Nudge1"),
+                    ("المنافس 1", "SKU2", "Price2", "Nudge2"),
+                    ("المنافس 2", "SKU3", "Price3", "Nudge3"),
+                    ("المنافس 3", "SKU4", "Price4", "Nudge4"),
+                    ("المنافس 4", "SKU5", "Price5", "Nudge5"),
+                    ("المنافس 5", "SKU6", "Price6", "Nudge6"),
+                ]
 
-        # FIX NUDGE
-        if raw_nudge and raw_nudge != "-":
-            nudge_clean = " | ".join(
-                [x.strip() for x in str(raw_nudge).split("|") if x.strip()]
-            )
-        else:
-            nudge_clean = "-"
+                html = f"""
+                <div style="border:1px solid #ccc; padding:20px; border-radius:12px;
+                            margin-bottom:20px; background:#fff; direction:rtl;">
+                    <h2>📦 <b>SKU الأساسي:</b>
+                        <span style="color:#007bff;">{sku_main}</span>
+                    </h2>
 
-        # HISTORY
-        change_data = get_last_change(df_hist, sku_val)
+                    <h3>🏷️ <b>الأسعار + آخر تغيير + النودجز:</b></h3>
+                    <ul style="font-size:18px; line-height:1.9; list-style:none; padding:0;">
+                """
 
-        if change_data:
-            change_html = f"""
-            <div style="font-size:13px; color:#777;">
-                🔄 آخر تغيير: {change_data['old']} → {change_data['new']}<br>
-                ⏱ {change_data['time']}
-            </div>
-            """
-        else:
-            change_html = "<div style='color:#777;'>لا يوجد تغييرات مسجلة</div>"
+                for label, sku_col, price_col, nudge_col in sku_list:
 
-        # UI BLOCK
-        st.markdown(f"""
-        <li>
-            <b>{label} ({sku_val}):</b>
-            <span style="color:#2c3e50; font-weight:bold;">{price_val}</span>
-            <br>
-            <span style="color:#555;">{nudge_clean}</span>
-            {change_html}
-        </li>
-        """, unsafe_allow_html=True)
+                    sku_val = clean_sku_text(row.get(sku_col, ""))
+                    price_val = row.get(price_col, "")
+                    raw_nudge = row.get(nudge_col, "-")
 
-    st.write("------")
+                    # تجميع النودجز
+                    if raw_nudge and raw_nudge != "-":
+                        nudge_show = " | ".join(
+                            [x.strip() for x in raw_nudge.split("|") if x.strip()]
+                        )
+                    else:
+                        nudge_show = "-"
+
+                    # history
+                    change_data = get_last_change(df_hist, sku_val)
+
+                    if change_data:
+                        change_html = f"""
+                        <div style="font-size:14px; margin-top:3px;">
+                            🔄 <b>آخر تغيير:</b> {change_data['old']} → {change_data['new']}
+                            <br>📅 <b>الوقت:</b> {change_data['time']}
+                        </div>
+                        """
+                    else:
+                        change_html = "<div style='font-size:13px; color:#777;'>لا يوجد تغييرات مسجلة</div>"
+
+                    html += f"""
+                        <li>
+                            <b>{label} ({sku_val}):</b>
+                            <span style="color:#2c3e50; font-weight:bold;">{price_val}</span>
+                            <br>
+                            <span style="color:#555;">{nudge_show}</span>
+                            {change_html}
+                        </li>
+                    """
+
+                html += "</ul></div>"
+
+                components.html(html, height=580)
+
+        last_update_placeholder.markdown(
+            f"🕒 آخر تحديث: **{time.strftime('%Y-%m-%d %H:%M:%S')}**"
+        )
+
+    except Exception as e:
+        st.error(f"❌ خطأ أثناء التحميل: {e}")
+
+    time.sleep(refresh_rate)
