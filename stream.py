@@ -19,24 +19,6 @@ st.set_page_config(
 st.title("📊 Noon Prices – Live Monitoring Dashboard")
 
 
-# ==========================================================
-#               تنظيف الـ SKU لضمان التطابق
-# ==========================================================
-def clean_sku(s):
-    if not isinstance(s, str):
-        return ""
-    return (
-        s.replace("\u200f", "")
-        .replace("\u200e", "")
-        .replace("\xa0", " ")
-        .strip()
-        .replace(" ", "")
-        .replace("\n", "")
-        .replace("\t", "")
-        .upper()
-    )
-
-
 # ================== تحميل الشيت الأساسي ==================
 def load_sheet():
     creds = Credentials.from_service_account_info(
@@ -81,20 +63,15 @@ def load_history():
     return df
 
 
-# استخراج آخر تغيير بناءً على SKU الصحيح بعد التنظيف
+# ================== استخراج آخر تغيير لأي SKU (أساسي أو منافس) ==================
 def get_last_change(df_hist, sku):
     if df_hist.empty:
         return None
 
-    sku = clean_sku(sku)
-
-    if sku == "":
+    if sku is None or sku == "" or sku == "-":
         return None
 
-    df_hist["SKU_clean"] = df_hist["SKU"].apply(clean_sku)
-
-    rows = df_hist[df_hist["SKU_clean"] == sku]
-
+    rows = df_hist[df_hist["SKU"] == sku]
     if rows.empty:
         return None
 
@@ -133,9 +110,7 @@ def highlight_changes(val):
     return ""
 
 
-# ==========================================================
-#                        التحديث
-# ==========================================================
+# =============== التحديث ==================
 while True:
     try:
         df = load_sheet()
@@ -156,18 +131,22 @@ while True:
 
             for idx, row in df.iterrows():
 
-                sku_main = clean_sku(row.get("SKU1", ""))
+                sku_main = row.get("SKU1", "").strip()
                 if sku_main == "":
                     continue
 
-                sku_list = [
-                    ("سعر منتجك", "SKU1", "Price1"),
-                    ("المنافس 1", "SKU2", "Price2"),
-                    ("المنافس 2", "SKU3", "Price3"),
-                    ("المنافس 3", "SKU4", "Price4"),
-                    ("المنافس 4", "SKU5", "Price5"),
-                    ("المنافس 5", "SKU6", "Price6"),
-                ]
+                # 🔥 قائمة SKUs (أساسي + 5 منافسين) بشكل ديناميكي
+                sku_list = []
+                for i in range(1, 7):
+                    sku_col = f"SKU{i}"
+                    price_col = f"Price{i}"
+
+                    if i == 1:
+                        label = "سعر منتجك"
+                    else:
+                        label = f"المنافس {i-1}"
+
+                    sku_list.append((label, sku_col, price_col))
 
                 # ------------------------ HTML CARD ------------------------
                 html = f"""
@@ -195,9 +174,10 @@ while True:
                 # --------- loop competitors + history ---------
                 for label, sku_col, price_col in sku_list:
 
-                    sku_val = clean_sku(str(row.get(sku_col, "")))
+                    sku_val = str(row.get(sku_col, "")).strip()
                     price_val = row.get(price_col, "")
 
+                    # 🔥 استخراج التغيير الصحيح لأي SKU
                     change_data = get_last_change(df_hist, sku_val)
 
                     if change_data:
