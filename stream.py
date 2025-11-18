@@ -46,7 +46,7 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//uQZAAAAAAEwKAAAAgAAAAAAAAAAAAA
 """
 
 # ============================================================
-# مشغل الصوت (مستمع رئيسي في الصفحة — لا يتغير)
+# مشغل الصوت
 # ============================================================
 def inject_audio_listener():
     js = f"""
@@ -245,13 +245,12 @@ while True:
                         <span style='color:#777;'>📅 {time_}</span>
                     </div>
 
-                    <!-- 🔊 إصلاح الصوت هنا -->
                     <script>
-                    document.addEventListener("DOMContentLoaded", function(){
-                        if ({i} === 0 && !localStorage.getItem("{cid}")) {
-                            window.parent.postMessage({"event":"PLAY_SOUND"}, "*");
-                        }
-                    });
+                    document.addEventListener("DOMContentLoaded", function(){{  
+                        if ({i} === 0 && !localStorage.getItem("{cid}")) {{  
+                            window.parent.postMessage({{"event":"PLAY_SOUND"}}, "*");  
+                        }}  
+                    }});
                     </script>
 
                     """, unsafe_allow_html=True)
