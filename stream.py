@@ -66,7 +66,7 @@ def load_sheet():
 
 
 # ====================================================================
-# 3) load history
+# 3) تحميل history
 # ====================================================================
 def load_history():
     creds = Credentials.from_service_account_info(
@@ -103,7 +103,7 @@ def load_history():
 
 
 # ====================================================================
-# 4) Smart Matching + جلب آخر تغيير + تنسيق كبير
+# 4) Smart Matching + جلب آخر تغيير (مع تنسيق كبير)
 # ====================================================================
 def get_last_change(df_hist, sku):
     if df_hist.empty:
@@ -167,7 +167,7 @@ last_update_placeholder = st.sidebar.empty()
 
 
 # ====================================================================
-# 6) عرض البيانات + تكبير الأسعار + تكبير التغيير
+# 6) عرض البيانات + Auto Height للكروت
 # ====================================================================
 while True:
     try:
@@ -187,13 +187,13 @@ while True:
                 if not sku_main:
                     continue
 
-                # ------- دالة تكبير تفاصيل التغيير -------
+                # ------------ تكبير تفاصيل التغيير ------------
                 def change_html(sku):
                     ch = get_last_change(df_hist, sku)
                     if ch:
-                        old = ch.get("old", "")
-                        new = ch.get("new", "")
-                        time_str = ch.get("time", "")
+                        old = ch["old"]
+                        new = ch["new"]
+                        time_str = ch["time"]
 
                         old_f = price_to_float(old)
                         new_f = price_to_float(new)
@@ -216,10 +216,9 @@ while True:
                             </span>
                         """
 
-                    else:
-                        return "<span style='font-size:16px; color:#777;'>لا يوجد تغييرات</span>"
+                    return "<span style='font-size:16px; color:#777;'>لا يوجد تغييرات</span>"
 
-                # ------- الكارت -------
+                # ---------------- الكارت ----------------
                 html_card = f"""
                 <div style="
                     border:1px solid #cccccc;
@@ -232,6 +231,7 @@ while True:
                     width:70%;
                     box-shadow:0 1px 6px rgba(0,0,0,0.08);
                 ">
+
                     <h2 style="margin:0 0 10px; font-size:24px;">
                         📦 <b>الـSKU الأساسي:</b>
                         <span style="color:#007bff;">{sku_main}</span>
@@ -243,7 +243,6 @@ while True:
 
                     <ul style="font-size:18px; line-height:2.2; list-style:none; padding:0;">
 
-                        <!-- سعر منتجك كبير -->
                         <li>
                             🟦 <b>سعر منتجك:</b>
                             <span style="font-size:26px; font-weight:bold; color:#000;">
@@ -253,7 +252,6 @@ while True:
                             <span style="font-size:16px; color:#666;">لا يوجد تغيير لمنتجك</span>
                         </li>
 
-                        <!-- المنافسين بخط كبير -->
                         <li>
                             🟨 <b>المنافس 1 ({row.get("SKU2","")}):</b>
                             <span style="font-size:26px; font-weight:bold; color:#000;">{row.get("Price2","")}</span>
@@ -289,7 +287,26 @@ while True:
                 </div>
                 """
 
-                components.html(html_card, height=600, scrolling=False)
+                # ---------------- AUTO HEIGHT FRAME ----------------
+                auto_html = f"""
+                <html>
+                <head>
+                <script>
+                function sendHeight() {{
+                    const height = document.body.scrollHeight;
+                    window.parent.postMessage({{ "frameHeight": height }}, "*");
+                }}
+                window.onload = sendHeight;
+                window.onresize = sendHeight;
+                </script>
+                </head>
+                <body style="margin:0;padding:0;">
+                {html_card}
+                </body>
+                </html>
+                """
+
+                components.html(auto_html, height=200, scrolling=False)
 
         # ============================
         #    توقيت السعودية
