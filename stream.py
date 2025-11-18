@@ -179,22 +179,22 @@ while True:
                     ("المنافس 5", "SKU6", "Price6", "Nudge6"),
                 ]
 
-                # =========== كارت المنتج (شكل جديد فقط) ============
+                # =========== كارت المنتج (شكل مصغّر) ============
                 html = f"""
                 <div style="
-                    border:1px solid #d9d9d9;
-                    padding:25px;
-                    border-radius:14px;
-                    margin-bottom:25px;
+                    border:1px solid #e3e3e3;
+                    padding:15px;
+                    border-radius:10px;
+                    margin-bottom:18px;
                     background:#ffffff;
                     direction:rtl;
-                    box-shadow:0 2px 8px rgba(0,0,0,0.05);
-                    width:95%;
+                    width:90%;
+                    box-shadow:0 1px 4px rgba(0,0,0,0.05);
                 ">
 
                     <h2 style="
-                        font-size:26px;
-                        margin-bottom:15px;
+                        font-size:20px;
+                        margin-bottom:10px;
                         color:#333;
                     ">
                         📦 <b>SKU الأساسي:</b>
@@ -202,16 +202,16 @@ while True:
                     </h2>
 
                     <h3 style="
-                        font-size:20px;
-                        margin:10px 0 20px 0;
-                        color:#444;
+                        font-size:16px;
+                        margin:5px 0 12px 0;
+                        color:#555;
                     ">
                         🏷️ <b>الأسعار + آخر تغيير + النودجز:</b>
                     </h3>
 
                     <ul style="
-                        font-size:18px;
-                        line-height:2.0;
+                        font-size:15px;
+                        line-height:1.6;
                         list-style:none;
                         padding:0;
                         margin:0;
@@ -219,7 +219,7 @@ while True:
                 """
 
                 # ===================================================
-                #  LOOP على منتجك + المنافسين
+                #  LOOP على منتجك + 5 منافسين
                 # ===================================================
                 for label, sku_col, price_col, nudge_col in sku_list:
 
@@ -240,31 +240,31 @@ while True:
                         change = get_last_change(df_hist, sku_val)
                         if change:
                             change_html = f"""
-                            <div style="font-size:14px; margin-top:3px;">
+                            <div style="font-size:13px; margin-top:3px;">
                                 🔄 <b>آخر تغيير:</b> {change['old']} → {change['new']}
                                 <br>📅 <b>الوقت:</b> {change['time']}
                             </div>
                             """
                         else:
-                            change_html = "<div style='font-size:13px; color:#777;'>لا يوجد تغييرات مسجلة</div>"
+                            change_html = "<div style='font-size:12px; color:#777;'>لا يوجد تغييرات مسجلة</div>"
 
-                    # ============ شكل العنصر داخل الكارت ============
+                    # ============ شكل العنصر ============
                     html += f"""
                         <li style="
-                            margin-bottom:18px;
-                            padding-bottom:15px;
-                            border-bottom:1px solid #eee;
+                            margin-bottom:12px;
+                            padding-bottom:10px;
+                            border-bottom:1px solid #f0f0f0;
                         ">
-                            <div style="font-size:19px; font-weight:bold; color:#222;">
+                            <div style="font-size:15px; font-weight:bold; color:#222;">
                                 {label} <span style="color:#888; font-weight:normal;">({sku_val})</span>
                             </div>
 
-                            <div style="margin-top:5px;">
+                            <div style="margin-top:4px; font-size:15px;">
                                 💰 <b>السعر:</b>
                                 <span style="color:#2c3e50; font-weight:bold;">{price_val}</span>
                             </div>
 
-                            <div style="color:#555; margin-top:4px;">
+                            <div style="color:#666; margin-top:3px; font-size:14px;">
                                 🔔 {nudge_show}
                             </div>
 
@@ -273,7 +273,7 @@ while True:
                     """
 
                 html += "</ul></div>"
-                components.html(html, height=650)
+                components.html(html, height=None, scrolling=True)
 
         last_update_placeholder.markdown(
             f"🕒 آخر تحديث: **{time.strftime('%Y-%m-%d %H:%M:%S')}**"
