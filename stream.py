@@ -7,17 +7,29 @@ import traceback
 import streamlit as st
 import pandas as pd
 import gspread
+import unicodedata
 from google.oauth2.service_account import Credentials
 import streamlit.components.v1 as components
 
-# إعداد صفحة Streamlit
-st.set_page_config(
-    page_title="Noon Prices Dashboard",
-    layout="wide",
-)
+# ================== إعداد واجهة Streamlit ==================
+st.set_page_config(page_title="Noon Prices – Auto Monitoring", layout="wide")
+st.title("📊 Noon Prices – Auto Monitoring (Developed Version)")
 
-st.title("📊 Noon Prices – Live Monitoring Dashboard")
+# ================== تنظيف SKU ==================
+def clean_sku(s):
+    if not s:
+        return ""
+    s = unicodedata.normalize("NFKD", str(s))
+    s = s.strip().replace("\u200f","").replace("\u200e","").replace("\n","").replace("\r","")
+    s = s.replace(" ", "")
+    return s
 
+# ================== استخراج SKU من سطر المنتج ==================
+def extract_sku_from_text(text):
+    possible = re.findall(r"[A-Za-z0-9]{10,}", str(text))
+    if possible:
+        return clean_sku(possible[0])
+    return ""
 
 # ================== تحميل الشيت الأساسي ==================
 def load_sheet():
@@ -25,58 +37,45 @@ def load_sheet():
         st.secrets["google_service_account"],
         scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
     )
-
     client = gspread.authorize(creds)
+    ws = client.open_by_key("1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk").worksheet("noon")
 
-    SPREADSHEET_ID = "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk"
-    SHEET_NAME = "noon"
-
-    ws = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
     data = ws.get_all_values()
-
     df = pd.DataFrame(data[1:], columns=data[0])
     return df
 
-
-# ================== تحميل شيت التاريخ ==================
+# ================== تحميل history ==================
 def load_history():
     creds = Credentials.from_service_account_info(
         st.secrets["google_service_account"],
         scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
     )
-
     client = gspread.authorize(creds)
 
-    SPREADSHEET_ID = "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk"
-
     try:
-        ws = client.open_by_key(SPREADSHEET_ID).worksheet("history")
+        ws = client.open_by_key("1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk").worksheet("history")
     except:
         return pd.DataFrame()
 
     data = ws.get_all_values()
-
     if len(data) < 2:
         return pd.DataFrame()
 
     df = pd.DataFrame(data[1:], columns=data[0])
+    df["SKU_clean"] = df["SKU"].apply(clean_sku)
     return df
 
-
-# ================== استخراج آخر تغيير لأي SKU (أساسي أو منافس) ==================
+# ================== آخر تحديث للسعر ==================
 def get_last_change(df_hist, sku):
-    if df_hist.empty:
+    sku = clean_sku(sku)
+    if df_hist.empty or sku == "":
         return None
 
-    if sku is None or sku == "" or sku == "-":
-        return None
-
-    rows = df_hist[df_hist["SKU"] == sku]
+    rows = df_hist[df_hist["SKU_clean"] == sku]
     if rows.empty:
         return None
 
     last = rows.tail(1).iloc[0]
-
     return {
         "old": last["Old Price"],
         "new": last["New Price"],
@@ -84,151 +83,100 @@ def get_last_change(df_hist, sku):
         "time": last["DateTime"]
     }
 
-
-# Sidebar
+# ================== Sidebar ==================
 st.sidebar.header("⚙️ الإعدادات")
-
-refresh_rate = st.sidebar.slider(
-    "⏱ معدل التحديث (ثواني)",
-    5, 300, 30
-)
-
+refresh_rate = st.sidebar.slider("⏱ معدل التحديث (ثواني)", 5, 300, 30)
 search_text = st.sidebar.text_input("🔍 البحث عن SKU")
-
 st.sidebar.markdown("---")
+
 placeholder = st.empty()
 last_update_placeholder = st.sidebar.empty()
 
-
-# تلوين الزيادة والنقصان
-def highlight_changes(val):
-    val = str(val)
-    if "↑" in val:
-        return "background-color: #d1ffd1;"
-    if "↓" in val:
-        return "background-color: #ffd1d1;"
-    return ""
-
-
-# =============== التحديث ==================
+# ================== تشغيل ==================
 while True:
     try:
         df = load_sheet()
         df_hist = load_history()
 
+        # فلترة البحث
         if search_text:
             df = df[df.apply(lambda row: row.astype(str).str.contains(search_text, case=False).any(), axis=1)]
-            df_hist = df_hist[df_hist.apply(lambda row: row.astype(str).str.contains(search_text, case=False).any(), axis=1)]
-
-        styled_df = df.style.applymap(highlight_changes)
 
         with placeholder.container():
 
-            # ---------------------------------------------------
-            #                     Cards View
-            # ---------------------------------------------------
-            st.subheader("🟦 عرض المنتجات بطريقة الكروت – Cards View")
+            st.subheader("🟦 عرض المنتجات (نسخة مطوّرة)")
 
             for idx, row in df.iterrows():
 
-                sku_main = row.get("SKU1", "").strip()
+                sku_main = clean_sku(row.get("SKU1", ""))
+
                 if sku_main == "":
                     continue
 
-                # 🔥 قائمة SKUs (أساسي + 5 منافسين) بشكل ديناميكي
-                sku_list = []
-                for i in range(1, 7):
-                    sku_col = f"SKU{i}"
-                    price_col = f"Price{i}"
+                # قائمة المنافسين
+                competitors = [
+                    ("سعر منتجك", "SKU1", "Price1", row.get("details1", "")),
+                    ("المنافس 1", "SKU2", "Price2", row.get("details2", "")),
+                    ("المنافس 2", "SKU3", "Price3", row.get("details3", "")),
+                    ("المنافس 3", "SKU4", "Price4", row.get("details4", "")),
+                    ("المنافس 4", "SKU5", "Price5", row.get("details5", "")),
+                    ("المنافس 5", "SKU6", "Price6", row.get("details6", "")),
+                ]
 
-                    if i == 1:
-                        label = "سعر منتجك"
-                    else:
-                        label = f"المنافس {i-1}"
-
-                    sku_list.append((label, sku_col, price_col))
-
-                # ------------------------ HTML CARD ------------------------
                 html = f"""
-                <div style="
-                    border:1px solid #cccccc;
-                    padding:20px;
-                    border-radius:12px;
-                    margin-bottom:20px;
-                    background:#ffffff;
-                    direction:rtl;
-                    font-family:'Tajawal', sans-serif;
-                ">
-                    <h2 style="margin:0 0 10px; font-size:24px;">
-                        📦 <b>SKU الأساسي:</b>
-                        <span style="color:#007bff;">{sku_main}</span>
-                    </h2>
-
+                <div style="border:1px solid #ccc; padding:20px; border-radius:12px; margin-bottom:20px; background:#fff; direction:rtl;">
+                    <h2>📦 <b>SKU الأساسي:</b> <span style='color:#007bff;'>{sku_main}</span></h2>
                     <div style="height:1px; background:#ddd; margin:10px 0;"></div>
-
-                    <h3 style="margin:10px 0; font-size:20px;">🏷️ <b>الأسعار + آخر تغيير:</b></h3>
-
-                    <ul style="font-size:18px; line-height:1.9; list-style:none; padding:0;">
+                    <h3>🏷️ الأسعار + آخر تغيير:</h3>
+                    <ul style="font-size:18px; list-style:none; padding:0;">
                 """
 
-                # --------- loop competitors + history ---------
-                for label, sku_col, price_col in sku_list:
+                # ================== عرض كل منافس ==================
+                for label, sku_col, price_col, detail in competitors:
 
-                    sku_val = str(row.get(sku_col, "")).strip()
+                    sku_val = clean_sku(row.get(sku_col, ""))
                     price_val = row.get(price_col, "")
 
-                    # 🔥 استخراج التغيير الصحيح لأي SKU
+                    # استخراج SKU من تفاصيل Noon لو الشيت فاضي
+                    if sku_val == "":
+                        extracted = extract_sku_from_text(detail)
+                        if extracted:
+                            sku_val = extracted
+
+                    # الآن جلب آخر تغيير
                     change_data = get_last_change(df_hist, sku_val)
 
                     if change_data:
                         change_html = f"""
-                        <div style='font-size:15px; margin-top:3px; color:#555;'>
-                            🔄 <b>آخر تغيير:</b> {change_data['old']} → {change_data['new']}  
-                            <br>📅 <b>الوقت:</b> {change_data['time']}
+                        <div style='font-size:15px; color:#444;'>
+                            🔄 <b>آخر تغيير:</b> {change_data['old']} → {change_data['new']}<br>
+                            📅 <b>الوقت:</b> {change_data['time']}
                         </div>
                         """
                     else:
                         change_html = "<div style='font-size:14px; color:#888;'>لا يوجد تغييرات مسجلة</div>"
 
                     html += f"""
-                        <li>
-                            <b>{label} ({sku_val}):</b> {price_val}
+                        <li><b>{label} ({sku_val}):</b> {price_val}
                             {change_html}
                         </li>
                     """
 
-                html += f"""
-                    </ul>
+                html += "</ul></div>"
 
-                    <p style="margin-top:15px; font-size:16px;">
-                        📅 <b>آخر تحديث:</b> {row.get('Last Update','')}
-                    </p>
-                </div>
-                """
+                components.html(html, height=550)
 
-                components.html(html, height=520)
+            st.subheader("📋 جدول البيانات")
+            st.dataframe(df)
 
-            # ---------------------------------------------------
-            #                   الجدول الأصلي
-            # ---------------------------------------------------
-            st.subheader("📋 الجدول الأصلي")
-            st.dataframe(styled_df, use_container_width=True)
-
-            # ---------------------------------------------------
-            #                   جدول history
-            # ---------------------------------------------------
             st.subheader("📉 سجل تغييرات الأسعار – History")
-
-            if df_hist.empty:
-                st.info("لا يوجد تغييرات مسجلة حتى الآن.")
-            else:
-                st.dataframe(df_hist, use_container_width=True)
+            st.dataframe(df_hist)
 
         last_update_placeholder.markdown(
             f"🕒 آخر تحديث: **{time.strftime('%Y-%m-%d %H:%M:%S')}**"
         )
 
     except Exception as e:
-        st.error(f"❌ خطأ أثناء تحميل الشيت: {e}")
+        st.error(f"❌ خطأ: {e}")
 
     time.sleep(refresh_rate)
