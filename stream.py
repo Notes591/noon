@@ -90,32 +90,38 @@ while True:
             st.subheader("🟦 عرض المنتجات بطريقة الكروت – Cards View")
 
             for idx, row in df.iterrows():
+
+                # تجاهل الصفوف التي لا تحتوي SKU1
+                if not row.get('SKU1') or row.get('SKU1').strip() == "":
+                    continue
+
                 st.markdown(f"""
                 <div style="
                     border:1px solid #ccc;
                     padding:20px;
                     border-radius:12px;
                     margin-bottom:15px;
-                    background:#fdfdfd;
-                    box-shadow:0 2px 6px rgba(0,0,0,0.05);
+                    background:#ffffff;
+                    box-shadow:0 2px 6px rgba(0,0,0,0.06);
                 ">
-                    <h2 style="margin-bottom:5px;">📦 SKU:
-                        <span style="color:#007bff;">{row.get('SKU', '')}</span>
+                    <h2 style="margin-bottom:5px;">📦 SKU الأساسي:
+                        <span style="color:#007bff;">{row.get('SKU1','')}</span>
                     </h2>
 
-                    <p style="font-size:18px;"><b>اسم المنتج:</b> {row.get('Title', '')}</p>
+                    <hr style="margin:10px 0;">
 
-                    <p style="font-size:18px; margin:4px 0;"><b>💰 السعر الحالي:</b> 
-                        <span style="color:#28a745; font-weight:bold;">{row.get('Current Price', '')}</span>
-                    </p>
+                    <h3>🏷️ أسعارك وأسعار المنافسين:</h3>
 
-                    <p style="font-size:18px; margin:4px 0;"><b>💵 السعر السابق:</b> {row.get('Old Price', '')}</p>
+                    <ul style="font-size:17px; line-height:1.6;">
+                        <li><b>🟦 سعر منتجك (Price1):</b> {row.get('Price1','')}</li>
+                        <li><b>🟨 المنافس 1 ({row.get('SKU2','')}):</b> {row.get('Price2','')}</li>
+                        <li><b>🟧 المنافس 2 ({row.get('SKU3','')}):</b> {row.get('Price3','')}</li>
+                        <li><b>🟥 المنافس 3 ({row.get('SKU4','')}):</b> {row.get('Price4','')}</li>
+                        <li><b>🟩 المنافس 4 ({row.get('SKU5','')}):</b> {row.get('Price5','')}</li>
+                        <li><b>🟪 المنافس 5 ({row.get('SKU6','')}):</b> {row.get('Price6','')}</li>
+                    </ul>
 
-                    <p style="font-size:18px; margin:4px 0;"><b>📉 الزيادة/النقصان:</b> 
-                        <span style="color:#d00;">{row.get('Change', '')}</span>
-                    </p>
-
-                    <p><b>📅 آخر تحديث:</b> {row.get('Last Update', '')}</p>
+                    <p><b>📅 آخر تحديث:</b> {row.get('Last Update','')}</p>
                 </div>
                 """, unsafe_allow_html=True)
 
