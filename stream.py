@@ -3,6 +3,8 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 import re
+import os
+import json
 
 
 # ========================================================
@@ -32,7 +34,7 @@ def load_sheet(spreadsheet_id, sheet_name, creds):
     except:
         df_hist = pd.DataFrame(columns=["SKU", "Old Price", "New Price", "Change", "DateTime"])
 
-    # normalize SKU in history
+    # normalize SKU
     if "SKU" in df_hist.columns:
         df_hist["SKU_clean"] = df_hist["SKU"].astype(str).apply(clean_sku_text)
         df_hist["SKU_lower"] = df_hist["SKU_clean"].str.lower()
@@ -43,7 +45,7 @@ def load_sheet(spreadsheet_id, sheet_name, creds):
 
 
 # ========================================================
-# GET LAST PRICE CHANGE
+# GET LAST CHANGE
 # ========================================================
 def get_last_change(df_hist, sku):
     try:
@@ -71,26 +73,43 @@ st.set_page_config(page_title="Noon Monitor", layout="wide")
 st.title("🟡 Noon Price Monitor — Stream View")
 
 
-# SIDEBAR
-st.sidebar.title("Settings")
+# ========================================================
+#  自动 تحميل JSON (بدون رفع)
+# ========================================================
 
-spreadsheet_id = st.sidebar.text_input("Spreadsheet ID",
-                                       "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk")
-sheet_name = st.sidebar.text_input("Sheet Name", "noon")
-
-json_file = st.sidebar.file_uploader("Upload service JSON", type=["json"])
+json_file = None
+for f in os.listdir("."):
+    if f.lower().endswith(".json"):
+        json_file = f
+        break
 
 if not json_file:
-    st.warning("ارفع ملف JSON للاستمرار")
+    st.error("❌ لم يتم العثور على ملف JSON في نفس مجلد البرنامج.")
     st.stop()
 
+with open(json_file, "r") as f:
+    service_data = json.load(f)
+
 creds = Credentials.from_service_account_info(
-    json_file.getvalue(),
+    service_data,
     scopes=["https://www.googleapis.com/auth/spreadsheets"]
 )
 
 
-# LOAD DATA
+# ========================================================
+# SETTINGS (بدون تغيير)
+# ========================================================
+spreadsheet_id = st.sidebar.text_input(
+    "Spreadsheet ID",
+    "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk"
+)
+
+sheet_name = st.sidebar.text_input("Sheet Name", "noon")
+
+
+# ========================================================
+# LOAD SHEET
+# ========================================================
 df, df_hist = load_sheet(spreadsheet_id, sheet_name, creds)
 
 if df.empty:
@@ -99,7 +118,7 @@ if df.empty:
 
 
 # ========================================================
-# DEFINE COLUMNS
+# COLUMNS
 # ========================================================
 sku_cols = ["SKU1", "SKU2", "SKU3", "SKU4", "SKU5", "SKU6"]
 price_cols = ["Price1", "Price2", "Price3", "Price4", "Price5", "Price6"]
@@ -107,7 +126,7 @@ nudge_cols = ["Nudge1", "Nudge2", "Nudge3", "Nudge4", "Nudge5", "Nudge6"]
 
 
 # ========================================================
-# DISPLAY BLOCKS
+# DISPLAY
 # ========================================================
 for idx, row in df.iterrows():
 
@@ -126,7 +145,7 @@ for idx, row in df.iterrows():
         price_val = row.get(price_col, "")
         raw_nudge = row.get(nudge_col, "-")
 
-        # NUDGE FIX
+        # FIX NUDGE
         if raw_nudge and raw_nudge != "-":
             nudge_clean = " | ".join(
                 [x.strip() for x in str(raw_nudge).split("|") if x.strip()]
@@ -147,7 +166,7 @@ for idx, row in df.iterrows():
         else:
             change_html = "<div style='color:#777;'>لا يوجد تغييرات مسجلة</div>"
 
-        # UI BLOCK (unchanged design)
+        # UI BLOCK
         st.markdown(f"""
         <li>
             <b>{label} ({sku_val}):</b>
