@@ -51,6 +51,7 @@ def load_sheet():
     data = ws.get_all_values()
     df = pd.DataFrame(data[1:], columns=data[0])
 
+	# إصلاح أسماء الأعمدة
     df.columns = (
         df.columns
         .str.strip()
@@ -87,6 +88,7 @@ def load_history():
 
     df = pd.DataFrame(data[1:], columns=data[0])
 
+	# تنظيف الأعمدة
     df.columns = (
         df.columns
         .str.strip()
@@ -158,6 +160,7 @@ while True:
         df = load_sheet()
         df_hist = load_history()
 
+		# البحث
         if search_text:
             df = df[df.apply(lambda r: r.astype(str).str.contains(search_text, case=False).any(), axis=1)]
 
@@ -179,7 +182,6 @@ while True:
                     ("المنافس 5", "SKU6", "Price6", "Nudge6"),
                 ]
 
-                # =========== كارت المنتج ============
                 html = f"""
                 <div style="
                     border:1px solid #e3e3e3;
@@ -191,7 +193,6 @@ while True:
                     width:90%;
                     box-shadow:0 1px 4px rgba(0,0,0,0.05);
                 ">
-
                     <h2 style="font-size:20px; margin-bottom:10px; color:#333;">
                         📦 <b>SKU الأساسي:</b>
                         <span style="color:#007bff;">{sku_main}</span>
@@ -204,7 +205,6 @@ while True:
                     <ul style="font-size:15px; line-height:1.6; list-style:none; padding:0; margin:0;">
                 """
 
-                # LOOP على المنافسين
                 for label, sku_col, price_col, nudge_col in sku_list:
 
                     sku_val = row.get(sku_col, "")
@@ -253,8 +253,8 @@ while True:
 
                 html += "</ul></div>"
 
-                # حذف السكروول — عرض كامل
-                components.html(html, scrolling=False)
+                # ============ عرض الكارت بدون Scroll + ارتفاع كبير ============
+                components.html(html, height=2500, scrolling=False)
 
         last_update_placeholder.markdown(
             f"🕒 آخر تحديث: **{time.strftime('%Y-%m-%d %H:%M:%S')}**"
