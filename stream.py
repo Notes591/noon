@@ -46,7 +46,7 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//uQZAAAAAAEwKAAAAgAAAAAAAAAAAAA
 """
 
 # ============================================================
-# مشغل الصوت
+# مشغل الصوت (مستمع رئيسي في الصفحة — لا يتغير)
 # ============================================================
 def inject_audio_listener():
     js = f"""
@@ -245,13 +245,15 @@ while True:
                         <span style='color:#777;'>📅 {time_}</span>
                     </div>
 
+                    <!-- 🔊 إصلاح الصوت هنا -->
                     <script>
-                    document.addEventListener("DOMContentLoaded", function(){{
-                        if ({i} === 0 && !localStorage.getItem("{cid}") && localStorage.getItem("sound_enabled")) {{
-                            window.postMessage({{"event":"PLAY_SOUND"}}, "*");
-                        }}
-                    }});
+                    document.addEventListener("DOMContentLoaded", function(){
+                        if ({i} === 0 && !localStorage.getItem("{cid}")) {
+                            window.parent.postMessage({"event":"PLAY_SOUND"}, "*");
+                        }
+                    });
                     </script>
+
                     """, unsafe_allow_html=True)
 
                 st.markdown("</div>", unsafe_allow_html=True)
@@ -269,7 +271,6 @@ while True:
                 if not sku_main:
                     continue
 
-                # دالة التغيير للمنافس — بعد الإصلاح
                 def ch_html(sku):
                     if not sku or str(sku).strip() == "":
                         return "<span style='color:#777;'>لا يوجد SKU للمنافس</span>"
