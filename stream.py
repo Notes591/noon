@@ -9,12 +9,62 @@ from google.oauth2.service_account import Credentials
 import streamlit.components.v1 as components
 import re
 from datetime import datetime, timedelta
+import base64
 import html
 
+# ----------------------------------------------
 # إعداد الصفحة
-st.set_page_config(page_title="Noon Prices Dashboard", layout="wide")
+# ----------------------------------------------
+st.set_page_config(page_title="Noon Prices – Dashboard", layout="wide")
 st.title("📊 Noon Prices – Live Monitoring Dashboard")
 
+# السماح للصوت أول ما المستخدم يضغط أي مكان
+st.markdown("""
+<script>
+document.addEventListener("click", function() {
+    localStorage.setItem("sound_enabled", "1");
+});
+</script>
+""", unsafe_allow_html=True)
+
+# ============================================================
+# صفّارة إنذار – Base64
+# ============================================================
+AUDIO_BASE64 = """
+SUQzAwAAAAAAF1RTU0UAAAAPAAADTGF2ZjU2LjQwLjEwMQAAAAAAAAAAAAAA//uQZAAAAAAD
+6wAABEV4dGVuc2libGUgQWxhcm0gMQAAACgAAABkYXRhAAAAAICAgICAgICAgICAgICAgICA
+gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC
+AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA
+gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC
+AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+AAAA//uQZAAAAAABgIAAABAAAAAIAAAAAExBTUUzLjk1LjIAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//uQZAAAAAAEwKAAAAgAAAAAAAAAAAAA
+EluZm8AAAAAAQAAAAMAAAADAAAAAwAAAAQAAAAEAAAABAAAAAUAAAAFAAAABgAAAAYAAAAH
+AAAABwAAAAgAAAAIAAAACQAAAAkAAAAKAAAACgAAAAsAAAALAAAADAAAAAwAAAANAAAADQAA
+AA4AAAAOAAAADwAAAA8AAAAQAAAAEAAAABEAAAARAAAAEgAAABIAAAATAAAAEwAAABQAAAAU
+AAAAFQAAABUAAAAXAAAAFwAAABgAAAAYAAAA
+"""
+
+# ============================================================
+# مشغل الصوت
+# ============================================================
+def inject_audio_listener():
+    js = f"""
+    <script>
+    window.addEventListener("message", (event) => {{
+        if (event.data.event === "PLAY_SOUND" && localStorage.getItem("sound_enabled")) {{
+            var audio = new Audio("data:audio/mp3;base64,{AUDIO_BASE64}");
+            audio.volume = 1.0;
+            audio.play();
+        }}
+    }});
+    </script>
+    """
+    st.markdown(js, unsafe_allow_html=True)
 
 # ============================================================
 # تنظيف SKU
@@ -29,13 +79,11 @@ def clean_sku_text(x):
         return m.group(1)
     parts = re.findall(r"[A-Za-z0-9]{6,}", x)
     if parts:
-        parts.sort(key=len, reverse=True)
-        return parts[0]
+        return max(parts, key=len)
     return x
 
-
 # ============================================================
-# تحميل شيت المنتجات
+# تحميل شيت noon
 # ============================================================
 def load_sheet():
     creds = Credentials.from_service_account_info(
@@ -43,18 +91,18 @@ def load_sheet():
         scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
     )
     client = gspread.authorize(creds)
-    SHEET_ID = "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk"
-    ws = client.open_by_key(SHEET_ID).worksheet("noon")
+
+    SID = "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk"
+    ws = client.open_by_key(SID).worksheet("noon")
 
     data = ws.get_all_values()
     df = pd.DataFrame(data[1:], columns=data[0])
     df.columns = df.columns.str.strip()
 
-    for c in ["SKU1","SKU2","SKU3","SKU4","SKU5","SKU6"]:
-        df[c] = df[c].apply(clean_sku_text)
+    for col in ["SKU1","SKU2","SKU3","SKU4","SKU5","SKU6"]:
+        df[col] = df[col].apply(clean_sku_text)
 
     return df
-
 
 # ============================================================
 # تحميل history
@@ -65,10 +113,11 @@ def load_history():
         scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
     )
     client = gspread.authorize(creds)
-    SHEET_ID = "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk"
+
+    SID = "1EIgmqX2Ku_0_tfULUc8IfvNELFj96WGz_aLoIekfluk"
 
     try:
-        ws = client.open_by_key(SHEET_ID).worksheet("history")
+        ws = client.open_by_key(SID).worksheet("history")
     except:
         return pd.DataFrame()
 
@@ -77,257 +126,232 @@ def load_history():
         return pd.DataFrame()
 
     df = pd.DataFrame(data[1:], columns=data[0])
+
     df["SKU_clean"] = df["SKU"].apply(clean_sku_text)
     df["SKU_lower"] = df["SKU_clean"].str.lower().str.replace(" ","")
     df["DateTime"] = pd.to_datetime(df["DateTime"], errors="coerce")
 
     return df
 
-
 # ============================================================
-# آخر تغيير للـ SKU
+# آخر تغيير
 # ============================================================
-def get_last_change(df_hist, sku):
-    if df_hist.empty:
-        return None
-    sku_clean = clean_sku_text(sku).lower().strip()
-    rows = df_hist[df_hist["SKU_lower"] == sku_clean]
-
-    if rows.empty:
-        rows = df_hist[df_hist["SKU_lower"].str.contains(sku_clean)]
-
-    if rows.empty:
+def get_last_change(hist, sku):
+    if hist.empty:
         return None
 
-    rows = rows.sort_values("DateTime")
-    last = rows.iloc[-1]
+    sku_clean = clean_sku_text(sku).lower()
+    r = hist[hist["SKU_lower"] == sku_clean]
+
+    if r.empty:
+        r = hist[hist["SKU_lower"].str.contains(sku_clean)]
+
+    if r.empty:
+        return None
+
+    r = r.sort_values("DateTime")
+    last = r.iloc[-1]
 
     return {
         "old": last["Old Price"],
         "new": last["New Price"],
-        "change": last["Change"],
         "time": str(last["DateTime"])
     }
 
-
 # ============================================================
-# تحويل السعر ل float
+# price → float
 # ============================================================
 def price_to_float(s):
     if not s:
         return None
-    s = str(s)
-    cleaned = re.sub(r"[^\d\.\-]", "", s)
+    cleaned = re.sub(r"[^\d\.\-]", "", str(s))
     try:
         return float(cleaned)
     except:
         return None
 
-
 # ============================================================
-# واجهة الإعدادات
+# إعدادات جانبية
 # ============================================================
 st.sidebar.header("⚙️ الإعدادات")
-refresh_rate = st.sidebar.slider("⏱ التحديث كل (ثواني)", 5, 300, 15)
-search_text = st.sidebar.text_input("🔍 بحث SKU")
+refresh_rate = st.sidebar.slider("⏱ التحديث (ثواني)", 5, 300, 15)
+search = st.sidebar.text_input("🔍 بحث SKU")
 
 placeholder = st.empty()
 last_update_widget = st.sidebar.empty()
 
+inject_audio_listener()
 
 # ============================================================
 # LOOP
 # ============================================================
 while True:
     try:
-
         df = load_sheet()
         hist = load_history()
 
-        if search_text:
-            df = df[df.apply(lambda r: r.astype(str).str.contains(search_text, case=False).any(), axis=1)]
+        if search:
+            df = df[df.apply(lambda r: r.astype(str).str.contains(search, case=False).any(), axis=1)]
 
         with placeholder.container():
 
             # ============================================================
-            # 🔔 قسم التغييرات (بدون لون – أحدث تغيير في الأعلى)
+            # 🔔 آخر التغييرات – داخل Scroll
             # ============================================================
-            st.subheader("🔔 آخر التغييرات (آخر 10)")
+            st.subheader("🔔 آخر التغييرات (داخل Scroll)")
 
             if not hist.empty:
 
                 recent = hist.sort_values("DateTime", ascending=False).head(10).reset_index(drop=True)
 
-                st.markdown("<div style='max-height:420px; overflow-y:auto; direction:rtl;'>",
-                            unsafe_allow_html=True)
+                st.markdown("""
+                <div style="
+                    max-height:300px;
+                    overflow-y:scroll;
+                    padding-right:12px;
+                    direction:rtl;
+                    background:#f8f8f8;
+                    border:1px solid #ddd;
+                    border-radius:10px;
+                    margin-bottom:20px;
+                ">
+                """, unsafe_allow_html=True)
 
-                for i, row in recent.iterrows():
+                for i, r in recent.iterrows():
 
-                    sku = html.escape(str(row["SKU"]))
-                    old_p = html.escape(str(row["Old Price"]))
-                    new_p = html.escape(str(row["New Price"]))
-                    time_c = html.escape(str(row["DateTime"]))
+                    sku  = html.escape(str(r["SKU"]))
+                    oldp = html.escape(str(r["Old Price"]))
+                    newp = html.escape(str(r["New Price"]))
+                    time_ = html.escape(str(r["DateTime"]))
+
+                    of = price_to_float(oldp)
+                    nf = price_to_float(newp)
 
                     arrow = "➡️"
-                    old_f = price_to_float(old_p)
-                    new_f = price_to_float(new_p)
-                    if old_f is not None and new_f is not None:
-                        if new_f > old_f: arrow = "🔺"
-                        elif new_f < old_f: arrow = "🔻"
+                    if of and nf:
+                        if nf > of: arrow = "🔺"
+                        elif nf < of: arrow = "🔻"
 
-                    change_id = f"{sku}_{time_c}"
+                    cid = f"{sku}_{time_}"
 
-                    html_block = f"""
-                    <div id="{change_id}" onclick="markSeen('{change_id}')" 
+                    st.markdown(f"""
+                    <div onclick="localStorage.setItem('{cid}','1')"
                         style="
                             background:#fff;
-                            border:2px solid #ddd;
+                            border:2px solid #ccc;
                             border-radius:10px;
-                            padding:15px;
+                            padding:10px;
                             margin-bottom:10px;
-                            cursor:pointer;
-                            direction:rtl;
-                            font-size:20px;
+                            font-size:19px;
                         ">
                         <b>SKU:</b> {sku}<br>
-                        <b>من:</b> {old_p} → <b>إلى:</b> {new_p} {arrow}<br>
-                        <span style='color:#666;'>📅 {time_c}</span>
+                        من: <b>{oldp}</b> → <b>{newp}</b> {arrow}<br>
+                        <span style='color:#777;'>📅 {time_}</span>
                     </div>
 
                     <script>
-                    function playAlertSound(){{
-                        var audio = new Audio("beep.mp3");
-                        audio.volume = 1.0;
-                        audio.play();
-                    }}
-
                     document.addEventListener("DOMContentLoaded", function(){{
-                        var seen = localStorage.getItem("{change_id}");
-                        if ({i} === 0 && seen !== "seen") {{
-                            playAlertSound();
+                        if ({i} === 0 && !localStorage.getItem("{cid}") && localStorage.getItem("sound_enabled")) {{
+                            window.parent.postMessage({{"event":"PLAY_SOUND"}}, "*");
                         }}
                     }});
-
-                    function markSeen(id){{
-                        localStorage.setItem(id, "seen");
-                    }}
                     </script>
-                    """
-
-                    st.markdown(html_block, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
 
                 st.markdown("</div>", unsafe_allow_html=True)
 
-            else:
-                st.info("لا توجد تغييرات بعد.")
-
             # ============================================================
-            # 🟦 كروت المنتجات — الأسعار كبيرة وواضحة
+            # 🟦 كروت الأسعار
             # ============================================================
-            st.subheader("🟦 المنتجات – Cards View")
+            st.subheader("📦 أسعار المنتجات والمنافسين")
 
-            for _, row in df.iterrows():
+            colors = ["#007bff", "#ff8800", "#ff4444", "#28a745", "#6f42c1"]
+
+            for idx, row in df.iterrows():
 
                 sku_main = row["SKU1"]
                 if not sku_main:
                     continue
 
-                def change_html(sku):
+                # دالة التغيير للمنافس — بعد الإصلاح
+                def ch_html(sku):
+                    if not sku or str(sku).strip() == "":
+                        return "<span style='color:#777;'>لا يوجد SKU للمنافس</span>"
+
                     ch = get_last_change(hist, sku)
                     if not ch:
                         return "<span style='color:#777;'>لا يوجد تغييرات</span>"
 
-                    old, new = ch["old"], ch["new"]
+                    old = ch["old"]
+                    new = ch["new"]
                     time_ = ch["time"]
 
-                    old_f = price_to_float(old)
-                    new_f = price_to_float(new)
+                    of = price_to_float(old)
+                    nf = price_to_float(new)
+
                     arrow = "➡️"
-                    if old_f is not None and new_f is not None:
-                        if new_f > old_f: arrow = "🔺"
-                        elif new_f < old_f: arrow = "🔻"
+                    if of and nf:
+                        if nf > of: arrow = "🔺"
+                        elif nf < of: arrow = "🔻"
 
                     return f"""
-                        <span style='font-size:22px; font-weight:bold; color:#000;'>
-                            🔄 من <b>{old}</b> إلى <b>{new}</b> {arrow}<br>
-                            <span style='font-size:18px; color:#444;'>📅 {time_}</span>
+                        <span style='font-size:20px; font-weight:600;'>
+                            🔄 {old} → {new} {arrow}<br>
+                            <span style='font-size:16px; color:#444;'>📅 {time_}</span>
                         </span>
                     """
 
-                card_html = f"""
+                card = f"""
                 <div style="
                     border:1px solid #ddd;
+                    border-radius:12px;
                     padding:20px;
-                    border-radius:14px;
-                    margin-bottom:25px;
-                    background:#fff;
-                    width:70%;
+                    margin-bottom:20px;
+                    background:white;
                     direction:rtl;
+                    width:70%;
                 ">
 
-                    <h2>📦 <b>SKU الأساسي:</b> 
-                        <span style='color:#007bff'>{sku_main}</span>
-                    </h2>
+                    <h2>🔵 SKU الأساسي: <span style='color:#007bff'>{sku_main}</span></h2>
 
-                    <h3>🏷️ الأسعار + آخر تغيير:</h3>
-
-                    <ul style="list-style:none; font-size:20px;">
-
-                        <li>
-                            🟦 <b>سعر منتجك:</b><br>
-                            <span style='font-size:36px; font-weight:bold; color:#000;'>
-                                {row.get("Price1","")}
-                            </span><br>
-                            <span style='color:#666;'>لا يوجد تغيير لمنتجك</span>
-                        </li>
-
-                        <li>
-                            🟨 منافس1 ({row.get("SKU2","")}):<br>
-                            <span style='font-size:36px; font-weight:bold; color:#000;'>
-                                {row.get("Price2","")}
-                            </span><br>{change_html(row.get("SKU2",""))}
-                        </li>
-
-                        <li>
-                            🟧 منافس2 ({row.get("SKU3","")}):<br>
-                            <span style='font-size:36px; font-weight:bold; color:#000;'>
-                                {row.get("Price3","")}
-                            </span><br>{change_html(row.get("SKU3",""))}
-                        </li>
-
-                        <li>
-                            🟥 منافس3 ({row.get("SKU4","")}):<br>
-                            <span style='font-size:36px; font-weight:bold; color:#000;'>
-                                {row.get("Price4","")}
-                            </span><br>{change_html(row.get("SKU4",""))}
-                        </li>
-
-                        <li>
-                            🟩 منافس4 ({row.get("SKU5","")}):<br>
-                            <span style='font-size:36px; font-weight:bold; color:#000;'>
-                                {row.get("Price5","")}
-                            </span><br>{change_html(row.get("SKU5",""))}
-                        </li>
-
-                        <li>
-                            🟪 منافس5 ({row.get("SKU6","")}):<br>
-                            <span style='font-size:36px; font-weight:bold; color:#000;'>
-                                {row.get("Price6","")}
-                            </span><br>{change_html(row.get("SKU6",""))}
-                        </li>
-
-                    </ul>
-                </div>
+                    <b style='font-size:24px;'>💰 سعر منتجك:</b><br>
+                    <span style='font-size:36px; font-weight:bold;'>{row.get("Price1","")}</span>
+                    <br><span style='color:#666;'>لا يوجد تغيير لمنتجك</span>
+                    <hr>
                 """
 
-                components.html(card_html, height=1350, scrolling=False)
+                competitors = [
+                    ("منافس1", row.get("SKU2",""), row.get("Price2",""), colors[0]),
+                    ("منافس2", row.get("SKU3",""), row.get("Price3",""), colors[1]),
+                    ("منافس3", row.get("SKU4",""), row.get("Price4",""), colors[2]),
+                    ("منافس4", row.get("SKU5",""), row.get("Price5",""), colors[3]),
+                    ("منافس5", row.get("SKU6",""), row.get("Price6",""), colors[4]),
+                ]
+
+                for name, sku_c, price, clr in competitors:
+
+                    card += f"""
+                    <div style='margin-bottom:18px;'>
+                        <b style='font-size:28px; color:{clr};'>{name}:</b><br>
+                        <span style='font-size:34px; font-weight:bold;'>{price}</span><br>
+                        {ch_html(sku_c)}
+                    </div>
+                    """
+
+                card += "</div>"
+
+                components.html(card, height=1300, scrolling=False)
 
 
-        # وقت السعودية
+        # ============================================================
+        # توقيت السعودية
+        # ============================================================
         ksa = datetime.utcnow() + timedelta(hours=3)
-        last_update_widget.markdown(f"🕒 آخر تحديث (KSA): **{ksa.strftime('%Y-%m-%d %H:%M:%S')}**")
+        last_update_widget.markdown(
+            f"🕒 آخر تحديث (KSA): **{ksa.strftime('%Y-%m-%d %H:%M:%S')}**"
+        )
 
     except Exception as e:
-        st.error(f"❌ خطأ: {e}")
+        st.error(f"❌ خطأ في التشغيل: {e}")
 
     time.sleep(refresh_rate)
