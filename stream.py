@@ -36,7 +36,7 @@ def clean_sku_text(x):
 
 
 # ====================================================================
-# 2) تحميل الشيت الرئيسي + تنظيف أسماء الأعمدة
+# 2) تحميل الشيت الرئيسي
 # ====================================================================
 def load_sheet():
     creds = Credentials.from_service_account_info(
@@ -65,7 +65,7 @@ def load_sheet():
 
 
 # ====================================================================
-# 3) تحميل history + تنظيف الأعمدة
+# 3) تحميل history
 # ====================================================================
 def load_history():
     creds = Credentials.from_service_account_info(
@@ -102,7 +102,7 @@ def load_history():
 
 
 # ====================================================================
-# 4) Smart Matching للمنافسين
+# 4) Smart Matching + جلب آخر تغيير
 # ====================================================================
 def get_last_change(df_hist, sku):
     if df_hist.empty:
@@ -113,28 +113,27 @@ def get_last_change(df_hist, sku):
         return None
 
     rows = df_hist[df_hist["SKU_lower"] == sku_clean]
+
     if not rows.empty:
         rows = rows.sort_values("DateTime")
         last = rows.iloc[-1]
-        return {"old": last["Old Price"], "new": last["New Price"], "change": last["Change"], "time": str(last["DateTime"])}
+        return {
+            "old": last["Old Price"],
+            "new": last["New Price"],
+            "change": last["Change"],
+            "time": str(last["DateTime"])
+        }
 
     rows = df_hist[df_hist["SKU_lower"].str.contains(sku_clean)]
     if not rows.empty:
         rows = rows.sort_values("DateTime")
         last = rows.iloc[-1]
-        return {"old": last["Old Price"], "new": last["New Price"], "change": last["Change"], "time": str(last["DateTime"])}
-
-    rows = df_hist[df_hist["SKU_lower"].str.startswith(sku_clean[:6])]
-    if not rows.empty:
-        rows = rows.sort_values("DateTime")
-        last = rows.iloc[-1]
-        return {"old": last["Old Price"], "new": last["New Price"], "change": last["Change"], "time": str(last["DateTime"])}
-
-    rows = df_hist[df_hist["SKU_lower"].str.endswith(sku_clean[-6:])]
-    if not rows.empty:
-        rows = rows.sort_values("DateTime")
-        last = rows.iloc[-1]
-        return {"old": last["Old Price"], "new": last["New Price"], "change": last["Change"], "time": str(last["DateTime"])}
+        return {
+            "old": last["Old Price"],
+            "new": last["New Price"],
+            "change": last["Change"],
+            "time": str(last["DateTime"])
+        }
 
     return None
 
@@ -151,7 +150,7 @@ last_update_placeholder = st.sidebar.empty()
 
 
 # ====================================================================
-# 6) عرض البيانات
+# 6) عرض البيانات + شكل الكارت الجديد
 # ====================================================================
 while True:
     try:
@@ -171,7 +170,20 @@ while True:
                 if not sku_main:
                     continue
 
-                # ========= شكل الكارت الذي طلبته =========
+                # ----------- الكارت الجديد مع آخر تغيير + الوقت -----------
+
+                def change_html(sku):
+                    ch = get_last_change(df_hist, sku)
+                    if ch:
+                        return f"""
+                            <span style='font-size:14px; color:#444;'>
+                                🔄 {ch['old']} → {ch['new']}<br>
+                                📅 {ch['time']}
+                            </span>
+                        """
+                    else:
+                        return "<span style='font-size:14px; color:#777;'>لا يوجد تغييرات</span>"
+
                 html_card = f"""
                 <div style="
                     border:1px solid #cccccc;
@@ -191,21 +203,48 @@ while True:
 
                     <div style="height:1px; background:#ddd; margin:10px 0;"></div>
 
-                    <h3 style="margin:10px 0; font-size:18px;">🏷️ <b>الأسعار:</b></h3>
+                    <h3 style="margin:10px 0; font-size:18px;">🏷️ <b>الأسعار + آخر تغيير:</b></h3>
 
                     <ul style="font-size:16px; line-height:2; list-style:none; padding:0;">
-                        <li>🟦 <b>سعر منتجك:</b> {row.get("Price1","")}</li>
-                        <li>🟨 <b>المنافس 1 ({row.get("SKU2","")}):</b> {row.get("Price2","")}</li>
-                        <li>🟧 <b>المنافس 2 ({row.get("SKU3","")}):</b> {row.get("Price3","")}</li>
-                        <li>🟥 <b>المنافس 3 ({row.get("SKU4","")}):</b> {row.get("Price4","")}</li>
-                        <li>🟩 <b>المنافس 4 ({row.get("SKU5","")}):</b> {row.get("Price5","")}</li>
-                        <li>🟪 <b>المنافس 5 ({row.get("SKU6","")}):</b> {row.get("Price6","")}</li>
+
+                        <!-- منتجك -->
+                        <li>
+                            🟦 <b>سعر منتجك:</b> {row.get("Price1","")}
+                            <br>
+                            <span style="font-size:14px; color:#666;">لا يوجد تغيير لمنتجك</span>
+                        </li>
+
+                        <li>
+                            🟨 <b>المنافس 1 ({row.get("SKU2","")}):</b> {row.get("Price2","")}
+                            <br>{change_html(row.get("SKU2",""))}
+                        </li>
+
+                        <li>
+                            🟧 <b>المنافس 2 ({row.get("SKU3","")}):</b> {row.get("Price3","")}
+                            <br>{change_html(row.get("SKU3",""))}
+                        </li>
+
+                        <li>
+                            🟥 <b>المنافس 3 ({row.get("SKU4","")}):</b> {row.get("Price4","")}
+                            <br>{change_html(row.get("SKU4",""))}
+                        </li>
+
+                        <li>
+                            🟩 <b>المنافس 4 ({row.get("SKU5","")}):</b> {row.get("Price5","")}
+                            <br>{change_html(row.get("SKU5",""))}
+                        </li>
+
+                        <li>
+                            🟪 <b>المنافس 5 ({row.get("SKU6","")}):</b> {row.get("Price6","")}
+                            <br>{change_html(row.get("SKU6",""))}
+                        </li>
+
                     </ul>
 
                 </div>
                 """
 
-                components.html(html_card, height=420, scrolling=False)
+                components.html(html_card, height=500, scrolling=False)
 
         last_update_placeholder.markdown(
             f"🕒 آخر تحديث: **{time.strftime('%Y-%m-%d %H:%M:%S')}**"
