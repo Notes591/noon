@@ -1,6 +1,5 @@
+playwright
 gspread
 google-auth
-selenium
-webdriver-manager
-gspread-formatting
-pandas
+google-auth-httplib2
+google-auth-oauthlib
