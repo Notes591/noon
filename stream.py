@@ -121,21 +121,8 @@ def load_history():
     df["DateTime"] = pd.to_datetime(df["DateTime"], errors="coerce")
 
     return df
-
 # -------------------------------------------------
-# تحويل السعر إلى float
-# -------------------------------------------------
-def price_to_float(s):
-    if not s:
-        return None
-    cleaned = re.sub(r"[^\d\.\-]", "", str(s))
-    try:
-        return float(cleaned)
-    except:
-        return None
-
-# -------------------------------------------------
-# الحصول على آخر تغيير
+# الحصول على آخر تغيير لمنتج منافس
 # -------------------------------------------------
 def get_last_change(hist, sku):
     if hist.empty:
@@ -159,6 +146,17 @@ def get_last_change(hist, sku):
         "time": str(last["DateTime"])
     }
 
+# -------------------------------------------------
+# تحويل السعر إلى float
+# -------------------------------------------------
+def price_to_float(s):
+    if not s:
+        return None
+    cleaned = re.sub(r"[^\d\.\-]", "", str(s))
+    try:
+        return float(cleaned)
+    except:
+        return None
 
 # -------------------------------------------------
 # إعدادات جانبية
@@ -185,9 +183,9 @@ while True:
 
         with placeholder.container():
 
-            # ---------------------------------------------
-            # 🔔 الإشعارات
-            # ---------------------------------------------
+            # -------------------------------------------------
+            # 🔔 الإشعارات الجديدة باستخدام components.html
+            # -------------------------------------------------
             st.subheader("🔔 آخر التغييرات (Notifications)")
 
             if not hist.empty:
@@ -197,32 +195,50 @@ while True:
                 for i, r in recent.iterrows():
 
                     sku  = html.escape(str(r["SKU"]))
-                    oldp = str(r["Old Price"])
-                    newp = str(r["New Price"])
-                    time_ = str(r["DateTime"])
+                    oldp = html.escape(str(r["Old Price"]))
+                    newp = html.escape(str(r["New Price"]))
+                    time_ = html.escape(str(r["DateTime"]))
+
+                    main_sku = ""
+                    my_price = ""
+
+                    try:
+                        match = df[df.apply(lambda row: sku in row.astype(str).values, axis=1)]
+                        if not match.empty:
+                            main_sku = match.iloc[0]["SKU1"]
+                            my_price = match.iloc[0]["Price1"]
+                    except:
+                        pass
 
                     of = price_to_float(oldp)
                     nf = price_to_float(newp)
 
-                    # سهم الزيادة والنقصان 🔺 🔻
-                    status_arrow = "➡️"
+                    arrow = "➡️"
                     if of is not None and nf is not None:
                         if nf > of:
-                            status_arrow = "🔺"
+                            arrow = "🔺"
                         elif nf < of:
-                            status_arrow = "🔻"
+                            arrow = "🔻"
 
-                    # سهم بين السعرين ← أو →
-                    change_arrow = "→"
-                    if of is not None and nf is not None and nf < of:
-                        change_arrow = "←"
-
+                    # كتلة الإشعار HTML
                     notify_html = f"""
-                    <div style='padding:12px; border-left:5px solid #007bff; margin-bottom:15px;
+                    <div style='padding:10px; border-left:5px solid #007bff; margin-bottom:15px;
                                 background:white; border-radius:8px; direction:rtl; font-size:18px;'>
 
+                        <div style='display:flex; justify-content:space-between; align-items:center;'>
+                            <div>
+                                <b>SKU:</b> {sku}
+                            </div>
+
+                            <div style='font-weight:700;'>
+                                <span style='color:#007bff;'>SKU الأساسي: {main_sku}</span>
+                                —
+                                <span style='color:#28a745;'>سعري: {my_price}</span>
+                            </div>
+                        </div>
+
                         <div style='font-size:20px; font-weight:700; margin-top:5px;'>
-                            {oldp} {change_arrow} {newp} {status_arrow}
+                            {oldp} → {newp} {arrow}
                         </div>
 
                         <div style='color:#777;'>
@@ -232,10 +248,9 @@ while True:
                     </div>
                     """
 
-                    components.html(notify_html, height=140, scrolling=False)
-
+                    components.html(notify_html, height=160, scrolling=False)
             # -------------------------------------------------
-            # قسم عرض المنتجات
+            # قسم عرض المنتجات والأسعار — بدون تغيير في الشكل
             # -------------------------------------------------
             st.subheader("📦 أسعار المنتجات والمنافسين")
 
@@ -247,6 +262,7 @@ while True:
                 if not sku_main:
                     continue
 
+                # وظيفة عرض تغيير المنافس لكل SKU
                 def ch_html(sku):
                     if not sku or str(sku).strip() == "":
                         return "<span style='color:#777;'>لا يوجد SKU للمنافس</span>"
@@ -262,26 +278,21 @@ while True:
                     of = price_to_float(old)
                     nf = price_to_float(new)
 
-                    # سهم حالة السعر
-                    status_arrow = "➡️"
+                    arrow = "➡️"
                     if of and nf:
                         if nf > of:
-                            status_arrow = "🔺"
+                            arrow = "🔺"
                         elif nf < of:
-                            status_arrow = "🔻"
-
-                    # سهم بين السعرين
-                    change_arrow = "→"
-                    if of and nf and nf < of:
-                        change_arrow = "←"
+                            arrow = "🔻"
 
                     return f"""
                         <span style='font-size:20px; font-weight:600;'>
-                            🔄 {old} {change_arrow} {new} {status_arrow}<br>
+                            🔄 {old} → {new} {arrow}<br>
                             <span style='font-size:16px; color:#444;'>📅 {time_}</span>
                         </span>
                     """
 
+                # كارت المنتج
                 card = f"""
                 <div style="
                     border:1px solid #ddd;
@@ -301,6 +312,7 @@ while True:
                     <hr>
                 """
 
+                # إضافة المنافسين
                 competitors = [
                     ("منافس1", row.get("SKU2",""), row.get("Price2",""), colors[0]),
                     ("منافس2", row.get("SKU3",""), row.get("Price3",""), colors[1]),
@@ -322,7 +334,9 @@ while True:
                 card += "</div>"
 
                 components.html(card, height=1300, scrolling=False)
-
+        # -------------------------------------------------
+        # تحديث توقيت السعودية في الـ Sidebar
+        # -------------------------------------------------
         ksa = datetime.utcnow() + timedelta(hours=3)
         last_update_widget.markdown(
             f"🕒 آخر تحديث (KSA): **{ksa.strftime('%Y-%m-%d %H:%M:%S')}**"
