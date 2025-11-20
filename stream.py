@@ -124,7 +124,7 @@ def load_history():
     return df
 
 # -------------------------------------------------
-# تحويل السعر إلى float (يتعامل مع الفواصل ',' و '.')
+# تحويل السعر إلى float
 # -------------------------------------------------
 def price_to_float(s):
     if s is None:
@@ -132,9 +132,7 @@ def price_to_float(s):
     text = str(s).strip()
     if text == "":
         return None
-    # تحويل الفاصلة العربية/أوروبية إلى نقطة
     text = text.replace(",", ".")
-    # حذف أي حروف أو رموز غير الأرقام والنقطة والسالب
     cleaned = re.sub(r"[^\d\.\-]", "", text)
     try:
         return float(cleaned)
@@ -142,7 +140,7 @@ def price_to_float(s):
         return None
 
 # -------------------------------------------------
-# الحصول على آخر تغيير لمنتج منافس
+# الحصول على آخر تغيير
 # -------------------------------------------------
 def get_last_change(hist, sku):
     if hist.empty:
@@ -192,12 +190,11 @@ while True:
         with placeholder.container():
 
             # -------------------------------------------------
-            # 🔔 الإشعارات الجديدة باستخدام components.html
+            # 🔔 الإشعارات
             # -------------------------------------------------
             st.subheader("🔔 آخر التغييرات (Notifications)")
 
             if not hist.empty:
-
                 recent = hist.sort_values("DateTime", ascending=False).head(5).reset_index(drop=True)
 
                 for i, r in recent.iterrows():
@@ -209,20 +206,21 @@ while True:
 
                     main_sku = ""
                     my_price = ""
+                    product_name = ""
 
                     try:
                         match = df[df.apply(lambda row: sku in row.astype(str).values, axis=1)]
                         if not match.empty:
                             main_sku = match.iloc[0].get("SKU1", "")
                             my_price = match.iloc[0].get("Price1", "")
+                            product_name = match.iloc[0].get("ProductName", "")
                     except:
                         pass
-
-                    # تحويل للنقاط (float) بدقة
+                    # تحويل للنقاط (float)
                     of = price_to_float(oldp)
                     nf = price_to_float(newp)
 
-                    # سهم حالة السعر: 🔺 زيادة ، 🔻 خفض ، ➡️ ما لا يمكن تحديده
+                    # سهم الزيادة/النقص
                     arrow = "➡️"
                     if of is not None and nf is not None:
                         if nf > of:
@@ -230,21 +228,21 @@ while True:
                         elif nf < of:
                             arrow = "🔻"
 
-                    # -------------------------------
-                    #  ⭐ تعديل السهم بين السعرين (→ أو ←)
-                    # -------------------------------
+                    # السهم بين السعرين (يمين أو يسار)
                     dir_arrow = "→"
                     if of is not None and nf is not None and nf < of:
                         dir_arrow = "←"
 
-                    # الحصول على اسم المنتج من الشيت (لو موجود)
-                    product_name = ""
-                    try:
-                        # match قد يحتوي على صف من df من قبل؛ حاول نجيب الاسم لو متاح
-                        if not match.empty:
-                            product_name = match.iloc[0].get("ProductName", "")
-                    except:
-                        product_name = ""
+                    # 🔥 تعديل الإشعار — إضافة سعري + SKU + المنتج
+                    my_info_html = ""
+                    if my_price:
+                        my_info_html = (
+                            " — <span style='color:#28a745;'>سعري: "
+                            + html.escape(str(my_price))
+                            + " — SKU: " + html.escape(str(main_sku))
+                            + (" — " + html.escape(product_name) if product_name else "")
+                            + "</span>"
+                        )
 
                     notify_html = f"""
                     <div style='padding:10px; border-left:5px solid #007bff; margin-bottom:15px;
@@ -252,13 +250,13 @@ while True:
 
                         <div style='display:flex; justify-content:space-between; align-items:center;'>
 
-                            <div>
-                                <b>SKU:</b> {sku}
-                            </div>
+                            <div><b>SKU:</b> {sku}</div>
 
                             <div style='font-weight:700; text-align:right;'>
-                                <span style='color:#007bff;'>{html.escape(product_name) if product_name else 'SKU الأساسي: ' + html.escape(main_sku)}</span>
-                                {' — <span style="color:#28a745;">سعري: ' + html.escape(str(my_price)) + '</span>' if my_price else ''}
+                                <span style='color:#007bff;'>
+                                    {html.escape(product_name) if product_name else 'SKU الأساسي: ' + html.escape(main_sku)}
+                                </span>
+                                {my_info_html}
                             </div>
 
                         </div>
@@ -272,10 +270,10 @@ while True:
                     </div>
                     """
 
-                    components.html(notify_html, height=160, scrolling=False)
+                    components.html(notify_html, height=170, scrolling=False)
 
             # -------------------------------------------------
-            # قسم عرض المنتجات والأسعار — بدون تغيير في الشكل
+            # قسم عرض المنتجات
             # -------------------------------------------------
             st.subheader("📦 أسعار المنتجات والمنافسين")
 
@@ -287,10 +285,9 @@ while True:
                 if not sku_main:
                     continue
 
-                # جلب اسم المنتج لو موجود
                 product_name = row.get("ProductName", "")
 
-                # وظيفة عرض تغيير المنافس لكل SKU
+                # تغيير المنافسين
                 def ch_html(sku):
                     if not sku or str(sku).strip() == "":
                         return "<span style='color:#777;'>لا يوجد SKU للمنافس</span>"
@@ -337,7 +334,6 @@ while True:
                 ">
                 """
 
-                # عنوان الكارت يظهر ProductName إن وُجد وإلا يظهر SKU الأساسي
                 if product_name:
                     card += f"<h2>🔵 {html.escape(product_name)} — SKU الأساسي: <span style='color:#007bff'>{sku_main}</span></h2>"
                 else:
@@ -350,7 +346,6 @@ while True:
                     <hr>
                 """
 
-                # إضافة المنافسين كما هي
                 competitors = [
                     ("منافس1", row.get("SKU2",""), row.get("Price2",""), colors[0]),
                     ("منافس2", row.get("SKU3",""), row.get("Price3",""), colors[1]),
@@ -360,7 +355,6 @@ while True:
                 ]
 
                 for name, sku_c, price, clr in competitors:
-
                     card += f"""
                     <div style='margin-bottom:18px;'>
                         <b style='font-size:28px; color:{clr};'>{name}:</b><br>
@@ -372,7 +366,6 @@ while True:
                 card += "</div>"
 
                 components.html(card, height=1300, scrolling=False)
-
         # -------------------------------------------------
         # تحديث توقيت السعودية في الـ Sidebar
         # -------------------------------------------------
