@@ -37,7 +37,7 @@ gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC
 AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
 ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA
 gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC
-AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
 AAAA//uQZAAAAAABgIAAABAAAAAIAAAAAExBTUUzLjk1LjIAAAAAAAAAAAAAAAAAAAAAAAAA
 """
 
@@ -177,6 +177,52 @@ last_update_widget = st.sidebar.empty()
 inject_audio_listener()
 
 # ============================================================
+# HELPERS FOR NUDGE DISPLAY
+# ============================================================
+def format_nudge_html(nudge_text):
+    """Return HTML for the yellow nudge badge (shape D) or empty string if nudge is empty/'-'."""
+    if nudge_text is None:
+        return ""
+    s = str(nudge_text).strip()
+    if s == "" or s == "-" :
+        return ""
+    # escape content
+    esc = html.escape(s)
+    return f"""
+    <div style="
+        background:#fff3cd;
+        color:#000;
+        padding:4px 8px;
+        border-radius:6px;
+        width:max-content;
+        font-weight:bold;
+        font-size:18px;
+        margin-top:6px;
+        display:inline-block;
+    ">
+        🟨 {esc}
+    </div>
+    """
+
+def find_nudge_for_sku_in_row(row, sku_to_find):
+    """
+    Given a dataframe row (product row) and a SKU string (possibly from history),
+    determine which SKU column matches and return corresponding Nudge value (if exists).
+    """
+    if not sku_to_find:
+        return ""
+    sku_clean = clean_sku_text(sku_to_find).strip()
+    if sku_clean == "":
+        return ""
+    sku_cols = ["SKU1","SKU2","SKU3","SKU4","SKU5","SKU6"]
+    for idx, col in enumerate(sku_cols, start=1):
+        val = row.get(col, "")
+        if clean_sku_text(val) == sku_clean:
+            nudge_col = f"Nudge{idx}"
+            return row.get(nudge_col, "")
+    return ""
+
+# ============================================================
 # LOOP
 # ============================================================
 while True:
@@ -207,15 +253,25 @@ while True:
                     main_sku = ""
                     my_price = ""
                     product_name = ""
+                    nudge_html = ""
 
                     try:
-                        match = df[df.apply(lambda row: sku in row.astype(str).values, axis=1)]
+                        # find matching product row in df
+                        # use cleaned SKU for matching
+                        sku_clean_search = clean_sku_text(str(r["SKU"]))
+                        match = df[df.apply(lambda row: sku_clean_search in [clean_sku_text(row.get(c,"")) for c in ["SKU1","SKU2","SKU3","SKU4","SKU5","SKU6"]], axis=1)]
                         if not match.empty:
-                            main_sku = match.iloc[0].get("SKU1", "")
-                            my_price = match.iloc[0].get("Price1", "")
-                            product_name = match.iloc[0].get("ProductName", "")
-                    except:
+                            matched_row = match.iloc[0]
+                            main_sku = matched_row.get("SKU1", "")
+                            my_price = matched_row.get("Price1", "")
+                            product_name = matched_row.get("ProductName", "")
+                            # find which SKU column matched and get corresponding Nudge
+                            nudge_val = find_nudge_for_sku_in_row(matched_row, sku_clean_search)
+                            nudge_html = format_nudge_html(nudge_val)
+                    except Exception:
+                        # keep defaults if anything fails
                         pass
+
                     # تحويل للنقاط (float)
                     of = price_to_float(oldp)
                     nf = price_to_float(newp)
@@ -265,12 +321,14 @@ while True:
                             {oldp} {dir_arrow} {newp} {arrow}
                         </div>
 
+                        {nudge_html}
+
                         <div style='color:#777;'>📅 {time_}</div>
 
                     </div>
                     """
 
-                    components.html(notify_html, height=170, scrolling=False)
+                    components.html(notify_html, height=200, scrolling=False)
 
             # -------------------------------------------------
             # قسم عرض المنتجات
@@ -339,26 +397,32 @@ while True:
                 else:
                     card += f"<h2>🔵 SKU الأساسي: <span style='color:#007bff'>{sku_main}</span></h2>"
 
+                # main product price + nudge (Nudge1)
+                main_price = row.get("Price1","")
+                main_nudge_html = format_nudge_html(row.get("Nudge1",""))
                 card += f"""
                     <b style='font-size:24px;'>💰 سعر منتجك:</b><br>
-                    <span style='font-size:36px; font-weight:bold;'>{row.get("Price1","")}</span>
+                    <span style='font-size:36px; font-weight:bold;'>{main_price}</span>
+                    <br>{main_nudge_html}
                     <br><span style='color:#666;'>لا يوجد تغيير لمنتجك</span>
                     <hr>
                 """
 
                 competitors = [
-                    ("منافس1", row.get("SKU2",""), row.get("Price2",""), colors[0]),
-                    ("منافس2", row.get("SKU3",""), row.get("Price3",""), colors[1]),
-                    ("منافس3", row.get("SKU4",""), row.get("Price4",""), colors[2]),
-                    ("منافس4", row.get("SKU5",""), row.get("Price5",""), colors[3]),
-                    ("منافس5", row.get("SKU6",""), row.get("Price6",""), colors[4]),
+                    ("منافس1", row.get("SKU2",""), row.get("Price2",""), row.get("Nudge2",""), colors[0]),
+                    ("منافس2", row.get("SKU3",""), row.get("Price3",""), row.get("Nudge3",""), colors[1]),
+                    ("منافس3", row.get("SKU4",""), row.get("Price4",""), row.get("Nudge4",""), colors[2]),
+                    ("منافس4", row.get("SKU5",""), row.get("Price5",""), row.get("Nudge5",""), colors[3]),
+                    ("منافس5", row.get("SKU6",""), row.get("Price6",""), row.get("Nudge6",""), colors[4]),
                 ]
 
-                for name, sku_c, price, clr in competitors:
+                for name, sku_c, price, nudge_val, clr in competitors:
+                    nudge_html_comp = format_nudge_html(nudge_val)
                     card += f"""
                     <div style='margin-bottom:18px;'>
                         <b style='font-size:28px; color:{clr};'>{name}:</b><br>
                         <span style='font-size:34px; font-weight:bold;'>{price}</span><br>
+                        {nudge_html_comp}
                         {ch_html(sku_c)}
                     </div>
                     """
