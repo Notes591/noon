@@ -20,7 +20,8 @@ st.title("📊 Noon Prices – Live Monitoring Dashboard")
 
 # -------------------------------------------------
 # صوت التنبيه Base64
-# (احتفظت بنفس الـ base64 الذي أرسلته)
+# (إذا كان هذا السلسلة ناقصة سيحاول البرنامج تصحيح padding،
+#  وإن لم ينجح سيعرض لك uploader لملف صوتي في الـ sidebar)
 # -------------------------------------------------
 AUDIO_BASE64 = """
 SUQzAwAAAAAAF1RTU0UAAAAPAAADTGF2ZjU2LjQwLjEwMQAAAAAAAAAAAAAA//uQZAAAAAAD
@@ -34,33 +35,83 @@ AAAA//uQZAAAAAABgIAAABAAAAAIAAAAAExBTUUzLjk1LjIAAAAAAAAAAAAAAAAAAAAAAAAA
 """
 
 # -------------------------------------------------
-# دالة تشغيل الصوت (st.audio + JS fallback)
+# Sidebar controls for audio
 # -------------------------------------------------
-def play_sound():
-    """يشغّل صوت التنبيه: اولًا يعرض st.audio (آمن)، وثانيًا يحاول تشغيله تلقائياً عبر JS داخل iframe كاحتياط."""
-    try:
-        audio_bytes = base64.b64decode(AUDIO_BASE64)
-    except Exception as e:
-        st.warning(f"خطأ فك الـ base64 للصوت: {e}")
+st.sidebar.header("🔔 إعدادات الصوت")
+enable_sound = st.sidebar.checkbox("تفعيل صوت التنبيهات", value=True)
+uploaded_sound = st.sidebar.file_uploader("رفع ملف صوتي (MP3) للاستخدام كبديل", type=["mp3", "wav", "ogg"])
+if st.sidebar.button("اختبار الصوت"):
+    # We'll attempt to play immediately (play_sound will handle uploaded_sound)
+    st.session_state.setdefault("_play_test", 0)
+    st.session_state["_play_test"] += 1
+
+# -------------------------------------------------
+# دالة تشغيل الصوت (يحاول تصحيح الـ base64 تلقائياً، ثم يستعمل ملف مرفوع إن وُجد)
+# -------------------------------------------------
+def _decode_base64_fix_padding(b64text: str):
+    """
+    يحاول تنظيف النص من أسطر/فراغات ثم يضيف '=' إن لزم لتصحيح padding.
+    يعيد bytes أو يطلق استثناء إذا فشل.
+    """
+    if not b64text:
+        raise ValueError("no base64 text")
+    s = "".join(b64text.strip().splitlines())
+    # remove spaces if any
+    s = s.replace(" ", "")
+    # pad with '=' to multiple of 4
+    mod = len(s) % 4
+    if mod != 0:
+        s += "=" * (4 - mod)
+    return base64.b64decode(s)
+
+def play_sound(force=False):
+    """
+    يحاول تشغيل الصوت بهذه الترتيب:
+    1) إذا رفع المستخدم ملف صوتي عبر uploader يستخدمه فوراً.
+    2) يحاول فك AUDIO_BASE64 (مع محاولة تصحيح padding تلقائياً).
+    3) يعرض st.audio (ضامن عمله بعد تفاعل) ويحاول fallback عبر components.html autoplay JS.
+    参数 force: لو True سيشغّل حتى لو enable_sound False (لمرّة اختبار).
+    """
+    # respect enable toggle unless forced
+    if not enable_sound and not force:
         return
 
-    # 1) طريقة Streamlit الرسمية — ستعرض مشغل صوتي
+    # 1) if user uploaded a sound file, use it
+    if uploaded_sound is not None:
+        try:
+            audio_bytes = uploaded_sound.read()
+            st.audio(audio_bytes, format=None)
+            return
+        except Exception as e:
+            st.warning(f"خطأ تشغيل الملف المرفوع: {e}")
+            # fallthrough to base64
+
+    # 2) try to decode base64 (with padding fix)
+    try:
+        audio_bytes = _decode_base64_fix_padding(AUDIO_BASE64)
+    except Exception as e:
+        st.warning("تعذر فك سلسلة الـ base64 للصوت تلقائيًا. يمكنك رفع ملف صوتي في الشريط الجانبي لتجنّب هذه المشكلة.")
+        return
+
+    # 3) play via st.audio (most reliable after user interaction)
     try:
         st.audio(audio_bytes, format="audio/mp3")
     except Exception as e:
-        # لا نوقف التنفيذ عند فشل st.audio
+        # not critical — show warning and try JS fallback
         st.warning(f"st.audio failed: {e}")
 
-    # 2) محاولة تشغيل تلقائي عبر components.html (قد يتجاهلها المتصفح إن لم يتم تفاعل المستخدم)
+    # 4) JS fallback attempt to autoplay (قد يتجاهله المتصفح إذا لم يحدث تفاعل)
     try:
-        # نص الـ base64 للتضمين في JS
-        b64 = AUDIO_BASE64.strip().replace("\n", "")
+        b64 = "".join(AUDIO_BASE64.strip().splitlines()).replace(" ", "")
+        # ensure padding
+        mod = len(b64) % 4
+        if mod != 0:
+            b64 += "=" * (4 - mod)
         js = f"""
         <script>
         (function() {{
             try {{
                 var audio = new Audio("data:audio/mp3;base64,{b64}");
-                // بعض المتصفحات تمنع autoplay بدون تفاعل؛ نحاول اللعب ونتجاهل الأخطاء
                 var p = audio.play();
                 if (p !== undefined) {{
                     p.catch(function(e){{/* ignore autoplay rejection */}});
@@ -73,7 +124,6 @@ def play_sound():
         """
         components.html(js, height=0)
     except Exception:
-        # silent
         pass
 
 # -------------------------------------------------
@@ -206,83 +256,10 @@ search = st.sidebar.text_input("🔍 بحث SKU")
 placeholder = st.empty()
 last_update_widget = st.sidebar.empty()
 
-# -------------------------------------------------
-# ★★ تنسيق النودجات (🔥 و 🟨)
-# -------------------------------------------------
-def format_nudge_html(nudge_text):
-    """
-    • لو النودج فارغ → يرجّع فاضي
-    • لو فيه sold recently → يظهر 🔥 (لون برتقالي)
-    • غير كده → يظهر 🟨 (لون أصفر)
-    """
-    if nudge_text is None:
-        return ""
-    s = str(nudge_text).strip()
-    if s == "" or s == "-":
-        return ""
-
-    lower_s = s.lower()
-
-    # 🔥 نودج مباع كثيراً (sold recently)
-    if "sold recently" in lower_s or re.search(r"\d+\s*\+?\s*sold", lower_s):
-        esc = html.escape(s)
-        return f"""
-        <div style="
-            background:#ffcc80;
-            color:#000;
-            padding:6px 10px;
-            border-radius:6px;
-            font-weight:bold;
-            width:max-content;
-            font-size:18px;
-            margin-top:6px;
-            display:inline-block;
-        ">
-            🔥 {esc}
-        </div>
-        """
-
-    # 🟨 نودج عادي
-    esc = html.escape(s)
-    return f"""
-    <div style="
-        background:#fff3cd;
-        color:#000;
-        padding:4px 8px;
-        border-radius:6px;
-        font-weight:bold;
-        width:max-content;
-        font-size:18px;
-        margin-top:6px;
-        display:inline-block;
-    ">
-        🟨 {esc}
-    </div>
-    """
-
-# -------------------------------------------------
-# تحديد أي نودج تابع لأي SKU
-# -------------------------------------------------
-def find_nudge_for_sku_in_row(row, sku_to_find):
-    if not sku_to_find:
-        return ""
-    sku_clean = clean_sku_text(sku_to_find).strip()
-    if sku_clean == "":
-        return ""
-
-    sku_cols = ["SKU1","SKU2","SKU3","SKU4","SKU5","SKU6"]
-    for idx, col in enumerate(sku_cols, start=1):
-        val = row.get(col, "")
-        if clean_sku_text(val) == sku_clean:
-            nudge_col = f"Nudge{idx}"
-            return row.get(nudge_col, "")
-    return ""
-
 # ============================================================
 # Initialize last_notified in session_state
 # ============================================================
 if "last_notified" not in st.session_state:
-    # store as pandas Timestamp or None
     st.session_state["last_notified"] = None
 
 # ============================================================
@@ -327,7 +304,12 @@ while True:
                             should_play = True
 
                     if should_play:
-                        play_sound()
+                        # play_sound respects enable_sound checkbox; force on if user requested test
+                        force = st.session_state.get("_play_test", 0) > 0
+                        play_sound(force=force)
+                        # reset test flag after using
+                        if force:
+                            st.session_state["_play_test"] = 0
 
                     # تحديث batch_max_dt
                     if row_dt is not None:
