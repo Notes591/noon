@@ -18,10 +18,17 @@ import html
 st.set_page_config(page_title="Noon Prices – Dashboard", layout="wide")
 st.title("📊 Noon Prices – Live Monitoring Dashboard")
 
+# السماح للصوت بعد أول ضغطة
+st.markdown("""
+<script>
+document.addEventListener("click", function() {
+    localStorage.setItem("sound_enabled", "1");
+});
+</script>
+""", unsafe_allow_html=True)
+
 # -------------------------------------------------
 # صوت التنبيه Base64
-# (إذا كان هذا السلسلة ناقصة سيحاول البرنامج تصحيح padding،
-#  وإن لم ينجح سيعرض لك uploader لملف صوتي في الـ sidebar)
 # -------------------------------------------------
 AUDIO_BASE64 = """
 SUQzAwAAAAAAF1RTU0UAAAAPAAADTGF2ZjU2LjQwLjEwMQAAAAAAAAAAAAAA//uQZAAAAAAD
@@ -34,98 +41,55 @@ ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
 AAAA//uQZAAAAAABgIAAABAAAAAIAAAAAExBTUUzLjk1LjIAAAAAAAAAAAAAAAAAAAAAAAAA
 """
 
-# -------------------------------------------------
-# Sidebar controls for audio
-# -------------------------------------------------
-st.sidebar.header("🔔 إعدادات الصوت")
-enable_sound = st.sidebar.checkbox("تفعيل صوت التنبيهات", value=True)
-uploaded_sound = st.sidebar.file_uploader("رفع ملف صوتي (MP3) للاستخدام كبديل", type=["mp3", "wav", "ogg"])
-if st.sidebar.button("اختبار الصوت"):
-    # We'll attempt to play immediately (play_sound will handle uploaded_sound)
-    st.session_state.setdefault("_play_test", 0)
-    st.session_state["_play_test"] += 1
+def inject_audio_listener():
+    js = f"""
+    <script>
+    window.addEventListener("message", (event) => {{
+        if (event.data.event === "PLAY_SOUND" && localStorage.getItem("sound_enabled")) {{
+            var audio = new Audio("data:audio/mp3;base64,{AUDIO_BASE64}");
+            audio.volume = 1.0;
+            audio.play();
+        }}
+    }});
+    </script>
+    """
+    st.markdown(js, unsafe_allow_html=True)
+
 
 # -------------------------------------------------
-# دالة تشغيل الصوت (يحاول تصحيح الـ base64 تلقائياً، ثم يستعمل ملف مرفوع إن وُجد)
+# دالة تشغيل الصوت
 # -------------------------------------------------
-def _decode_base64_fix_padding(b64text: str):
-    """
-    يحاول تنظيف النص من أسطر/فراغات ثم يضيف '=' إن لزم لتصحيح padding.
-    يعيد bytes أو يطلق استثناء إذا فشل.
-    """
-    if not b64text:
-        raise ValueError("no base64 text")
-    s = "".join(b64text.strip().splitlines())
-    # remove spaces if any
-    s = s.replace(" ", "")
-    # pad with '=' to multiple of 4
-    mod = len(s) % 4
-    if mod != 0:
-        s += "=" * (4 - mod)
-    return base64.b64decode(s)
-
-def play_sound(force=False):
-    """
-    يحاول تشغيل الصوت بهذه الترتيب:
-    1) إذا رفع المستخدم ملف صوتي عبر uploader يستخدمه فوراً.
-    2) يحاول فك AUDIO_BASE64 (مع محاولة تصحيح padding تلقائياً).
-    3) يعرض st.audio (ضامن عمله بعد تفاعل) ويحاول fallback عبر components.html autoplay JS.
-    参数 force: لو True سيشغّل حتى لو enable_sound False (لمرّة اختبار).
-    """
-    # respect enable toggle unless forced
-    if not enable_sound and not force:
-        return
-
-    # 1) if user uploaded a sound file, use it
-    if uploaded_sound is not None:
-        try:
-            audio_bytes = uploaded_sound.read()
-            st.audio(audio_bytes, format=None)
-            return
-        except Exception as e:
-            st.warning(f"خطأ تشغيل الملف المرفوع: {e}")
-            # fallthrough to base64
-
-    # 2) try to decode base64 (with padding fix)
+def play_sound():
     try:
-        audio_bytes = _decode_base64_fix_padding(AUDIO_BASE64)
-    except Exception as e:
-        st.warning("تعذر فك سلسلة الـ base64 للصوت تلقائيًا. يمكنك رفع ملف صوتي في الشريط الجانبي لتجنّب هذه المشكلة.")
-        return
-
-    # 3) play via st.audio (most reliable after user interaction)
-    try:
+        # attempt to decode base64 and play via st.audio
+        b = ''.join(AUDIO_BASE64.strip().splitlines())
+        mod = len(b) % 4
+        if mod != 0:
+            b += '=' * (4 - mod)
+        audio_bytes = base64.b64decode(b)
         st.audio(audio_bytes, format="audio/mp3")
     except Exception as e:
-        # not critical — show warning and try JS fallback
-        st.warning(f"st.audio failed: {e}")
-
-    # 4) JS fallback attempt to autoplay (قد يتجاهله المتصفح إذا لم يحدث تفاعل)
-    try:
-        b64 = "".join(AUDIO_BASE64.strip().splitlines()).replace(" ", "")
-        # ensure padding
-        mod = len(b64) % 4
-        if mod != 0:
-            b64 += "=" * (4 - mod)
-        js = f"""
-        <script>
-        (function() {{
-            try {{
-                var audio = new Audio("data:audio/mp3;base64,{b64}");
-                var p = audio.play();
-                if (p !== undefined) {{
-                    p.catch(function(e){{/* ignore autoplay rejection */}});
+        # fallback: try to play via JS inside components (may be blocked)
+        try:
+            b64 = ''.join(AUDIO_BASE64.strip().splitlines()).replace(" ", "")
+            mod = len(b64) % 4
+            if mod != 0:
+                b64 += '=' * (4 - mod)
+            js = f"""<script>
+            (function() {{
+                try {{
+                    var audio = new Audio("data:audio/mp3;base64,{b64}");
+                    var p = audio.play();
+                    if (p !== undefined) {{
+                        p.catch(function(e){{/* ignore autoplay rejection */}});
+                    }}
+                }} catch (e) {{
                 }}
-            }} catch (e) {{
-                // ignore
-            }}
-        }})();
-        </script>
-        """
-        components.html(js, height=0)
-    except Exception:
-        pass
-
+            }})();
+            </script>"""
+            components.html(js, height=0)
+        except Exception:
+            pass
 # -------------------------------------------------
 # تنظيف SKU
 # -------------------------------------------------
@@ -141,6 +105,7 @@ def clean_sku_text(x):
     if parts:
         return max(parts, key=len)
     return x
+
 
 # -------------------------------------------------
 # تحويل SKU إلى رابط HTML قابل للنقر
@@ -204,7 +169,6 @@ def load_history():
     df["DateTime"] = pd.to_datetime(df["DateTime"], errors="coerce")
 
     return df
-
 # -------------------------------------------------
 # تحويل السعر إلى float
 # -------------------------------------------------
@@ -256,11 +220,80 @@ search = st.sidebar.text_input("🔍 بحث SKU")
 placeholder = st.empty()
 last_update_widget = st.sidebar.empty()
 
+inject_audio_listener()
+
 # ============================================================
-# Initialize last_notified in session_state
+# ★★ تنسيق النودجات (🔥 و 🟨)
 # ============================================================
-if "last_notified" not in st.session_state:
-    st.session_state["last_notified"] = None
+def format_nudge_html(nudge_text):
+    """
+    • لو النودج فارغ → يرجّع فاضي
+    • لو فيه sold recently → يظهر 🔥 (لون برتقالي)
+    • غير كده → يظهر 🟨 (لون أصفر)
+    """
+    if nudge_text is None:
+        return ""
+    s = str(nudge_text).strip()
+    if s == "" or s == "-":
+        return ""
+
+    lower_s = s.lower()
+
+    # 🔥 نودج مباع كثيراً (sold recently)
+    if "sold recently" in lower_s or re.search(r"\d+\s*\+?\s*sold", lower_s):
+        esc = html.escape(s)
+        return f"""
+        <div style="
+            background:#ffcc80;
+            color:#000;
+            padding:6px 10px;
+            border-radius:6px;
+            font-weight:bold;
+            width:max-content;
+            font-size:18px;
+            margin-top:6px;
+            display:inline-block;
+        ">
+            🔥 {esc}
+        </div>
+        """
+
+    # 🟨 نودج عادي
+    esc = html.escape(s)
+    return f"""
+    <div style="
+        background:#fff3cd;
+        color:#000;
+        padding:4px 8px;
+        border-radius:6px;
+        font-weight:bold;
+        width:max-content;
+        font-size:18px;
+        margin-top:6px;
+        display:inline-block;
+    ">
+        🟨 {esc}
+    </div>
+    """
+
+# -------------------------------------------------
+# تحديد أي نودج تابع لأي SKU
+# -------------------------------------------------
+def find_nudge_for_sku_in_row(row, sku_to_find):
+    if not sku_to_find:
+        return ""
+    sku_clean = clean_sku_text(sku_to_find).strip()
+    if sku_clean == "":
+        return ""
+
+    sku_cols = ["SKU1","SKU2","SKU3","SKU4","SKU5","SKU6"]
+    for idx, col in enumerate(sku_cols, start=1):
+        val = row.get(col, "")
+        if clean_sku_text(val) == sku_clean:
+            nudge_col = f"Nudge{idx}"
+            return row.get(nudge_col, "")
+    return ""
+
 
 # ============================================================
 # LOOP
@@ -282,41 +315,10 @@ while True:
             st.subheader("🔔 آخر التغييرات (Notifications)")
 
             if not hist.empty:
-                # أحدث السجلات (نزولاً)
                 recent = hist.sort_values("DateTime", ascending=False).head(5).reset_index(drop=True)
-
-                # track the newest datetime in this batch to update session_state after processing
-                batch_max_dt = st.session_state.get("last_notified")
 
                 for i, r in recent.iterrows():
 
-                    # parse datetime from history row
-                    try:
-                        row_dt = pd.to_datetime(r.get("DateTime", None), errors="coerce")
-                    except Exception:
-                        row_dt = None
-
-                    # إذا كان هذا السجل أحدث من آخر تنبيه — شغّل الصوت
-                    should_play = False
-                    if row_dt is not None:
-                        last = st.session_state.get("last_notified")
-                        if last is None or (pd.notna(row_dt) and row_dt > last):
-                            should_play = True
-
-                    if should_play:
-                        # play_sound respects enable_sound checkbox; force on if user requested test
-                        force = st.session_state.get("_play_test", 0) > 0
-                        play_sound(force=force)
-                        # reset test flag after using
-                        if force:
-                            st.session_state["_play_test"] = 0
-
-                    # تحديث batch_max_dt
-                    if row_dt is not None:
-                        if batch_max_dt is None or (pd.notna(row_dt) and row_dt > batch_max_dt):
-                            batch_max_dt = row_dt
-
-                    # نستخدم sku_html لعرض الرابط
                     sku_html = sku_to_link_html(r.get("SKU", ""))
                     oldp = html.escape(str(r["Old Price"]))
                     newp = html.escape(str(r["New Price"]))
@@ -361,7 +363,7 @@ while True:
                     if of is not None and nf is not None and nf < of:
                         dir_arrow = "←"
 
-                    # 🔥 إضافة سعري + SKU + المنتج (نستخدم رابط SKU هنا أيضاً)
+                    # 🔥 إضافة سعري + SKU + المنتج
                     my_info_html = ""
                     if my_price:
                         my_info_html = (
@@ -383,7 +385,7 @@ while True:
 
                             <div style='font-weight:700; text-align:right;'>
                                 <span style='color:#007bff;'>
-                                    {html.escape(product_name) if product_name else 'SKU الأساسي: ' + sku_to_link_html(main_sku)}
+                                    {html.escape(product_name) if product_name else 'SKU الأساسي: ' + html.escape(main_sku)}
                                 </span>
                                 {my_info_html}
                             </div>
@@ -402,10 +404,6 @@ while True:
                     """
 
                     components.html(notify_html, height=200, scrolling=False)
-
-                # بعد معالجة الـ batch أحدّث آخر وقت تم إعلامي به
-                if batch_max_dt is not None:
-                    st.session_state["last_notified"] = batch_max_dt
 
             # -------------------------------------------------
             # عرض المنتجات والمنافسين
@@ -471,7 +469,6 @@ while True:
                 ">
                 """
 
-                # نعرض اسم المنتج مع رابط SKU الأساسي
                 if product_name:
                     card += f"<h2>🔵 {html.escape(product_name)} — SKU الأساسي: <span style='color:#007bff'>{sku_to_link_html(sku_main)}</span></h2>"
                 else:
