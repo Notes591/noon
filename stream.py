@@ -18,17 +18,9 @@ import html
 st.set_page_config(page_title="Noon Prices – Dashboard", layout="wide")
 st.title("📊 Noon Prices – Live Monitoring Dashboard")
 
-# السماح بالصوت بعد أول ضغطة
-st.markdown("""
-<script>
-document.addEventListener("click", function() {
-    localStorage.setItem("sound_enabled", "1");
-});
-</script>
-""", unsafe_allow_html=True)
-
 # -------------------------------------------------
 # صوت التنبيه Base64
+# (احتفظت بنفس الـ base64 الذي أرسلته)
 # -------------------------------------------------
 AUDIO_BASE64 = """
 SUQzAwAAAAAAF1RTU0UAAAAPAAADTGF2ZjU2LjQwLjEwMQAAAAAAAAAAAAAA//uQZAAAAAAD
@@ -41,19 +33,48 @@ ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
 AAAA//uQZAAAAAABgIAAABAAAAAIAAAAAExBTUUzLjk1LjIAAAAAAAAAAAAAAAAAAAAAAAAA
 """
 
-def inject_audio_listener():
-    js = f"""
-    <script>
-    window.addEventListener("message", (event) => {{
-        if (event.data.event === "PLAY_SOUND" && localStorage.getItem("sound_enabled")) {{
-            var audio = new Audio("data:audio/mp3;base64,{AUDIO_BASE64}");
-            audio.volume = 1.0;
-            audio.play();
-        }}
-    }});
-    </script>
-    """
-    st.markdown(js, unsafe_allow_html=True)
+# -------------------------------------------------
+# دالة تشغيل الصوت (st.audio + JS fallback)
+# -------------------------------------------------
+def play_sound():
+    """يشغّل صوت التنبيه: اولًا يعرض st.audio (آمن)، وثانيًا يحاول تشغيله تلقائياً عبر JS داخل iframe كاحتياط."""
+    try:
+        audio_bytes = base64.b64decode(AUDIO_BASE64)
+    except Exception as e:
+        st.warning(f"خطأ فك الـ base64 للصوت: {e}")
+        return
+
+    # 1) طريقة Streamlit الرسمية — ستعرض مشغل صوتي
+    try:
+        st.audio(audio_bytes, format="audio/mp3")
+    except Exception as e:
+        # لا نوقف التنفيذ عند فشل st.audio
+        st.warning(f"st.audio failed: {e}")
+
+    # 2) محاولة تشغيل تلقائي عبر components.html (قد يتجاهلها المتصفح إن لم يتم تفاعل المستخدم)
+    try:
+        # نص الـ base64 للتضمين في JS
+        b64 = AUDIO_BASE64.strip().replace("\n", "")
+        js = f"""
+        <script>
+        (function() {{
+            try {{
+                var audio = new Audio("data:audio/mp3;base64,{b64}");
+                // بعض المتصفحات تمنع autoplay بدون تفاعل؛ نحاول اللعب ونتجاهل الأخطاء
+                var p = audio.play();
+                if (p !== undefined) {{
+                    p.catch(function(e){{/* ignore autoplay rejection */}});
+                }}
+            }} catch (e) {{
+                // ignore
+            }}
+        }})();
+        </script>
+        """
+        components.html(js, height=0)
+    except Exception:
+        # silent
+        pass
 
 # -------------------------------------------------
 # تنظيف SKU
@@ -79,7 +100,6 @@ def sku_to_link_html(sku):
     if not sku_clean:
         return html.escape(str(sku))
     url = f"https://www.noon.com/saudi-en/{sku_clean}/p/"
-    # نفذ html.escape للاسم المعروض لو كان فيه حروف غريبة، لكن نعرض sku_clean عادة آمن
     display = html.escape(sku_clean)
     return f'<a href="{url}" target="_blank" rel="noopener" style="color:#007bff; font-weight:bold; text-decoration:none;">{display}</a>'
 
@@ -186,11 +206,9 @@ search = st.sidebar.text_input("🔍 بحث SKU")
 placeholder = st.empty()
 last_update_widget = st.sidebar.empty()
 
-inject_audio_listener()
-
-# ============================================================
+# -------------------------------------------------
 # ★★ تنسيق النودجات (🔥 و 🟨)
-# ============================================================
+# -------------------------------------------------
 def format_nudge_html(nudge_text):
     """
     • لو النودج فارغ → يرجّع فاضي
@@ -261,6 +279,13 @@ def find_nudge_for_sku_in_row(row, sku_to_find):
     return ""
 
 # ============================================================
+# Initialize last_notified in session_state
+# ============================================================
+if "last_notified" not in st.session_state:
+    # store as pandas Timestamp or None
+    st.session_state["last_notified"] = None
+
+# ============================================================
 # LOOP
 # ============================================================
 while True:
@@ -280,9 +305,34 @@ while True:
             st.subheader("🔔 آخر التغييرات (Notifications)")
 
             if not hist.empty:
+                # أحدث السجلات (نزولاً)
                 recent = hist.sort_values("DateTime", ascending=False).head(5).reset_index(drop=True)
 
+                # track the newest datetime in this batch to update session_state after processing
+                batch_max_dt = st.session_state.get("last_notified")
+
                 for i, r in recent.iterrows():
+
+                    # parse datetime from history row
+                    try:
+                        row_dt = pd.to_datetime(r.get("DateTime", None), errors="coerce")
+                    except Exception:
+                        row_dt = None
+
+                    # إذا كان هذا السجل أحدث من آخر تنبيه — شغّل الصوت
+                    should_play = False
+                    if row_dt is not None:
+                        last = st.session_state.get("last_notified")
+                        if last is None or (pd.notna(row_dt) and row_dt > last):
+                            should_play = True
+
+                    if should_play:
+                        play_sound()
+
+                    # تحديث batch_max_dt
+                    if row_dt is not None:
+                        if batch_max_dt is None or (pd.notna(row_dt) and row_dt > batch_max_dt):
+                            batch_max_dt = row_dt
 
                     # نستخدم sku_html لعرض الرابط
                     sku_html = sku_to_link_html(r.get("SKU", ""))
@@ -369,8 +419,11 @@ while True:
                     </div>
                     """
 
-                    # عرض HTML مع تفعيل النقل الآمن (unsafe_allow_html داخل components.html مرفوض لذا نستخدم components.html مباشرة)
                     components.html(notify_html, height=200, scrolling=False)
+
+                # بعد معالجة الـ batch أحدّث آخر وقت تم إعلامي به
+                if batch_max_dt is not None:
+                    st.session_state["last_notified"] = batch_max_dt
 
             # -------------------------------------------------
             # عرض المنتجات والمنافسين
