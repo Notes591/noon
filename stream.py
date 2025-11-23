@@ -18,7 +18,7 @@ import html
 st.set_page_config(page_title="Noon Prices – Dashboard", layout="wide")
 st.title("📊 Noon Prices – Live Monitoring Dashboard")
 
-# السماح للصوت بعد أول ضغطة
+# السماح بالصوت بعد أول ضغطة
 st.markdown("""
 <script>
 document.addEventListener("click", function() {
@@ -55,41 +55,6 @@ def inject_audio_listener():
     """
     st.markdown(js, unsafe_allow_html=True)
 
-
-# -------------------------------------------------
-# دالة تشغيل الصوت
-# -------------------------------------------------
-def play_sound():
-    try:
-        # attempt to decode base64 and play via st.audio
-        b = ''.join(AUDIO_BASE64.strip().splitlines())
-        mod = len(b) % 4
-        if mod != 0:
-            b += '=' * (4 - mod)
-        audio_bytes = base64.b64decode(b)
-        st.audio(audio_bytes, format="audio/mp3")
-    except Exception as e:
-        # fallback: try to play via JS inside components (may be blocked)
-        try:
-            b64 = ''.join(AUDIO_BASE64.strip().splitlines()).replace(" ", "")
-            mod = len(b64) % 4
-            if mod != 0:
-                b64 += '=' * (4 - mod)
-            js = f"""<script>
-            (function() {{
-                try {{
-                    var audio = new Audio("data:audio/mp3;base64,{b64}");
-                    var p = audio.play();
-                    if (p !== undefined) {{
-                        p.catch(function(e){{/* ignore autoplay rejection */}});
-                    }}
-                }} catch (e) {{
-                }}
-            }})();
-            </script>"""
-            components.html(js, height=0)
-        except Exception:
-            pass
 # -------------------------------------------------
 # تنظيف SKU
 # -------------------------------------------------
@@ -106,7 +71,6 @@ def clean_sku_text(x):
         return max(parts, key=len)
     return x
 
-
 # -------------------------------------------------
 # تحويل SKU إلى رابط HTML قابل للنقر
 # -------------------------------------------------
@@ -115,6 +79,7 @@ def sku_to_link_html(sku):
     if not sku_clean:
         return html.escape(str(sku))
     url = f"https://www.noon.com/saudi-en/{sku_clean}/p/"
+    # نفذ html.escape للاسم المعروض لو كان فيه حروف غريبة، لكن نعرض sku_clean عادة آمن
     display = html.escape(sku_clean)
     return f'<a href="{url}" target="_blank" rel="noopener" style="color:#007bff; font-weight:bold; text-decoration:none;">{display}</a>'
 
@@ -169,6 +134,7 @@ def load_history():
     df["DateTime"] = pd.to_datetime(df["DateTime"], errors="coerce")
 
     return df
+
 # -------------------------------------------------
 # تحويل السعر إلى float
 # -------------------------------------------------
@@ -294,7 +260,6 @@ def find_nudge_for_sku_in_row(row, sku_to_find):
             return row.get(nudge_col, "")
     return ""
 
-
 # ============================================================
 # LOOP
 # ============================================================
@@ -319,6 +284,7 @@ while True:
 
                 for i, r in recent.iterrows():
 
+                    # نستخدم sku_html لعرض الرابط
                     sku_html = sku_to_link_html(r.get("SKU", ""))
                     oldp = html.escape(str(r["Old Price"]))
                     newp = html.escape(str(r["New Price"]))
@@ -363,7 +329,7 @@ while True:
                     if of is not None and nf is not None and nf < of:
                         dir_arrow = "←"
 
-                    # 🔥 إضافة سعري + SKU + المنتج
+                    # 🔥 إضافة سعري + SKU + المنتج (نستخدم رابط SKU هنا أيضاً)
                     my_info_html = ""
                     if my_price:
                         my_info_html = (
@@ -385,7 +351,7 @@ while True:
 
                             <div style='font-weight:700; text-align:right;'>
                                 <span style='color:#007bff;'>
-                                    {html.escape(product_name) if product_name else 'SKU الأساسي: ' + html.escape(main_sku)}
+                                    {html.escape(product_name) if product_name else 'SKU الأساسي: ' + sku_to_link_html(main_sku)}
                                 </span>
                                 {my_info_html}
                             </div>
@@ -403,6 +369,7 @@ while True:
                     </div>
                     """
 
+                    # عرض HTML مع تفعيل النقل الآمن (unsafe_allow_html داخل components.html مرفوض لذا نستخدم components.html مباشرة)
                     components.html(notify_html, height=200, scrolling=False)
 
             # -------------------------------------------------
@@ -469,6 +436,7 @@ while True:
                 ">
                 """
 
+                # نعرض اسم المنتج مع رابط SKU الأساسي
                 if product_name:
                     card += f"<h2>🔵 {html.escape(product_name)} — SKU الأساسي: <span style='color:#007bff'>{sku_to_link_html(sku_main)}</span></h2>"
                 else:
