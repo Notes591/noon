@@ -37,7 +37,7 @@ gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC
 AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
 ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA
 gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC
-ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
 AAAA//uQZAAAAAABgIAAABAAAAAIAAAAAExBTUUzLjk1LjIAAAAAAAAAAAAAAAAAAAAAAAAA
 """
 
@@ -79,7 +79,6 @@ def sku_to_link_html(sku):
     if not sku_clean:
         return html.escape(str(sku))
     url = f"https://www.noon.com/saudi-en/{sku_clean}/p/"
-    # نفذ html.escape للاسم المعروض لو كان فيه حروف غريبة، لكن نعرض sku_clean عادة آمن
     display = html.escape(sku_clean)
     return f'<a href="{url}" target="_blank" rel="noopener" style="color:#007bff; font-weight:bold; text-decoration:none;">{display}</a>'
 
@@ -192,11 +191,6 @@ inject_audio_listener()
 # ★★ تنسيق النودجات (🔥 و 🟨)
 # ============================================================
 def format_nudge_html(nudge_text):
-    """
-    • لو النودج فارغ → يرجّع فاضي
-    • لو فيه sold recently → يظهر 🔥 (لون برتقالي)
-    • غير كده → يظهر 🟨 (لون أصفر)
-    """
     if nudge_text is None:
         return ""
     s = str(nudge_text).strip()
@@ -205,7 +199,6 @@ def format_nudge_html(nudge_text):
 
     lower_s = s.lower()
 
-    # 🔥 نودج مباع كثيراً (sold recently)
     if "sold recently" in lower_s or re.search(r"\d+\s*\+?\s*sold", lower_s):
         esc = html.escape(s)
         return f"""
@@ -224,7 +217,6 @@ def format_nudge_html(nudge_text):
         </div>
         """
 
-    # 🟨 نودج عادي
     esc = html.escape(s)
     return f"""
     <div style="
@@ -261,30 +253,24 @@ def find_nudge_for_sku_in_row(row, sku_to_find):
     return ""
 
 # ============================================================
-# LOOP
+# LOOP الرئيسي
 # ============================================================
 while True:
     try:
         df = load_sheet()
         hist = load_history()
 
-        # بحث
         if search:
             df = df[df.apply(lambda r: r.astype(str).str.contains(search, case=False).any(), axis=1)]
 
         with placeholder.container():
 
-            # -------------------------------------------------
-            # 🔔 الإشعارات
-            # -------------------------------------------------
             st.subheader("🔔 آخر التغييرات (Notifications)")
 
             if not hist.empty:
                 recent = hist.sort_values("DateTime", ascending=False).head(5).reset_index(drop=True)
 
                 for i, r in recent.iterrows():
-
-                    # نستخدم sku_html لعرض الرابط
                     sku_html = sku_to_link_html(r.get("SKU", ""))
                     oldp = html.escape(str(r["Old Price"]))
                     newp = html.escape(str(r["New Price"]))
@@ -312,11 +298,9 @@ while True:
 
                     except Exception:
                         pass
-                    # تحويل الأسعار لأرقام
+
                     of = price_to_float(oldp)
                     nf = price_to_float(newp)
-
-                    # سهم الزيادة/النقص
                     arrow = "➡️"
                     if of is not None and nf is not None:
                         if nf > of:
@@ -324,12 +308,10 @@ while True:
                         elif nf < of:
                             arrow = "🔻"
 
-                    # السهم بين السعرين
                     dir_arrow = "→"
                     if of is not None and nf is not None and nf < of:
                         dir_arrow = "←"
 
-                    # 🔥 إضافة سعري + SKU + المنتج (نستخدم رابط SKU هنا أيضاً)
                     my_info_html = ""
                     if my_price:
                         my_info_html = (
@@ -340,22 +322,18 @@ while True:
                             + "</span>"
                         )
 
-                    # الإشعار النهائي (مع النودج لو موجود)
                     notify_html = f"""
                     <div style='padding:10px; border-left:5px solid #007bff; margin-bottom:15px;
                                 background:white; border-radius:8px; direction:rtl; font-size:18px;'>
 
                         <div style='display:flex; justify-content:space-between; align-items:center;'>
-
                             <div><b>SKU:</b> {sku_html}</div>
-
                             <div style='font-weight:700; text-align:right;'>
                                 <span style='color:#007bff;'>
                                     {html.escape(product_name) if product_name else 'SKU الأساسي: ' + sku_to_link_html(main_sku)}
                                 </span>
                                 {my_info_html}
                             </div>
-
                         </div>
 
                         <div style='font-size:20px; font-weight:700; margin-top:5px;'>
@@ -368,30 +346,24 @@ while True:
 
                     </div>
                     """
-
-                    # عرض HTML مع تفعيل النقل الآمن (unsafe_allow_html داخل components.html مرفوض لذا نستخدم components.html مباشرة)
                     components.html(notify_html, height=200, scrolling=False)
 
             # -------------------------------------------------
             # عرض المنتجات والمنافسين
             # -------------------------------------------------
             st.subheader("📦 أسعار المنتجات والمنافسين")
-
             colors = ["#007bff", "#ff8800", "#ff4444", "#28a745", "#6f42c1"]
 
             for idx, row in df.iterrows():
-
                 sku_main = row.get("SKU1", "")
                 if not sku_main:
                     continue
 
                 product_name = row.get("ProductName", "")
 
-                # ------- عرض التغييرات للمنافس -------
                 def ch_html(sku):
                     if not sku or str(sku).strip() == "":
                         return "<span style='color:#777;'>لا يوجد SKU للمنافس</span>"
-
                     ch = get_last_change(hist, sku)
                     if not ch:
                         return "<span style='color:#777;'>لا يوجد تغييرات</span>"
@@ -421,9 +393,7 @@ while True:
                         </span>
                     """
 
-                # -------------------------
-                # كارت المنتج (Product Card)
-                # -------------------------
+                # ------- كارت المنتج -------
                 card = f"""
                 <div style="
                     border:1px solid #ddd;
@@ -435,14 +405,20 @@ while True:
                     width:70%;
                 ">
                 """
-
-                # نعرض اسم المنتج مع رابط SKU الأساسي
                 if product_name:
                     card += f"<h2>🔵 {html.escape(product_name)} — SKU الأساسي: <span style='color:#007bff'>{sku_to_link_html(sku_main)}</span></h2>"
                 else:
                     card += f"<h2>🔵 SKU الأساسي: <span style='color:#007bff'>{sku_to_link_html(sku_main)}</span></h2>"
 
-                # السعر الأساسي + النودج الأساسي
+                # ★★ عرض صورة المنتج ★★
+                image_url = row.get("Image url", "").strip()
+                if image_url:
+                    card += f"""
+                    <div style='margin:10px 0; text-align:center;'>
+                        <img src="{html.escape(image_url)}" style="max-width:100%; height:auto; border-radius:8px;">
+                    </div>
+                    """
+
                 main_price = row.get("Price1","")
                 main_nudge_html = format_nudge_html(row.get("Nudge1",""))
                 card += f"""
@@ -453,9 +429,7 @@ while True:
                     <hr>
                 """
 
-                # -------------------------
-                # بيانات المنافسين
-                # -------------------------
+                # المنافسين
                 competitors = [
                     ("منافس1", row.get("SKU2",""), row.get("Price2",""), row.get("Nudge2",""), colors[0]),
                     ("منافس2", row.get("SKU3",""), row.get("Price3",""), row.get("Nudge3",""), colors[1]),
@@ -463,23 +437,15 @@ while True:
                     ("منافس4", row.get("SKU5",""), row.get("Price5",""), row.get("Nudge5",""), colors[3]),
                     ("منافس5", row.get("SKU6",""), row.get("Price6",""), row.get("Nudge6",""), colors[4]),
                 ]
-                # -------------------------
-                # عرض كل منافس داخل الكارت
-                # -------------------------
-                for cname, skuX, priceX, nudgeX, colorX in competitors:
 
+                for cname, skuX, priceX, nudgeX, colorX in competitors:
                     if not skuX or str(skuX).strip() == "":
                         continue
 
                     sku_clean = clean_sku_text(skuX)
-
-                    # آخر تغيير لهذا المنافس
                     ch_html_block = ch_html(sku_clean)
-
-                    # HTML النودج
                     nudge_html_block = format_nudge_html(nudgeX)
 
-                    # كارت المنافس
                     card += f"""
                     <div style="
                         border:1px solid #ccc;
@@ -505,22 +471,14 @@ while True:
                     </div>
                     """
 
-                # إغلاق الكارت
                 card += "</div>"
-
                 components.html(card, height=900, scrolling=True)
 
-        # آخر وقت تحديث
         last_update_widget.write(
             "⏳ آخر تحديث: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         )
-
         time.sleep(refresh_rate)
 
     except Exception as e:
         st.error(f"❌ خطأ: {e}")
         time.sleep(refresh_rate)
-# نهاية الملف
-# -------------------------------------------------------------
-# لا يوجد أي كود إضافي أسفل هذا السطر
-# -------------------------------------------------------------
