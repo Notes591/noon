@@ -18,6 +18,72 @@ import html
 st.set_page_config(page_title="Noon Prices – Dashboard", layout="wide")
 st.title("📊 Noon Prices – Live Monitoring Dashboard")
 
+# ----------------------------------------------
+# 📱 دعم كامل للجوال (CSS)
+# ----------------------------------------------
+st.markdown("""
+<style>
+
+/* ---------  العرض العام للجوال  ---------- */
+@media (max-width: 768px) {
+
+    /* تصغير الكروت */
+    div[style*="border:1px solid #ddd"] {
+        width: 100% !important;
+        padding: 12px !important;
+        margin: 10px 0 !important;
+    }
+
+    /* تصغير بوكس المنافسين */
+    div[style*="background:#fafafa"] {
+        padding: 10px !important;
+        margin: 8px 0 !important;
+    }
+
+    /* الصورة داخل البطاقة */
+    img {
+        max-width: 100% !important;
+        height: auto !important;
+    }
+
+    /* العناوين */
+    h2, h3 {
+        font-size: 18px !important;
+        line-height: 1.4 !important;
+    }
+
+    /* سعر منتجك */
+    span[style*="font-size:36px"] {
+        font-size: 26px !important;
+    }
+
+    /* سعر المنافس */
+    span[style*="font-size:26px"] {
+        font-size: 20px !important;
+    }
+
+    /* نودج 🔥 🟨 */
+    div[style*="background:#fff3cd"],
+    div[style*="background:#ffcc80"]{
+        font-size: 14px !important;
+        padding: 4px 6px !important;
+    }
+
+    /* إشعارات آخر التغيرات */
+    div[style*="border-left:5px solid"] {
+        font-size: 14px !important;
+        padding: 10px !important;
+    }
+
+    /* iframe الخاص بـ components.html */
+    iframe {
+        height: auto !important;
+        min-height: 150px !important;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
 # السماح بالصوت بعد أول ضغطة
 st.markdown("""
 <script>
@@ -238,13 +304,17 @@ while True:
     try:
         df = load_sheet()
         hist = load_history()
+
         if search:
             df = df[df.apply(lambda r: r.astype(str).str.contains(search, case=False).any(), axis=1)]
+
         with placeholder.container():
+
             # -----------------------------
             # 🔔 آخر التغييرات (Notifications)
             # -----------------------------
             st.subheader("🔔 آخر التغييرات (Notifications)")
+
             if not hist.empty:
                 recent = hist.sort_values("DateTime", ascending=False).head(5).reset_index(drop=True)
                 for i, r in recent.iterrows():
@@ -257,6 +327,7 @@ while True:
                     product_name = ""
                     nudge_html = ""
                     image_url = ""
+
                     try:
                         sku_clean_search = clean_sku_text(str(r["SKU"]))
                         match = df[df.apply(lambda row: sku_clean_search in [
@@ -273,6 +344,7 @@ while True:
                             image_url = matched_row.get("Image url", "").strip()
                     except Exception:
                         pass
+
                     of = price_to_float(oldp)
                     nf = price_to_float(newp)
                     arrow = "➡️"
@@ -284,6 +356,7 @@ while True:
                     dir_arrow = "→"
                     if of is not None and nf is not None and nf < of:
                         dir_arrow = "←"
+
                     my_info_html = ""
                     if my_price:
                         my_info_html = (
@@ -293,9 +366,7 @@ while True:
                             + (" — " + html.escape(product_name) if product_name else "")
                             + "</span>"
                         )
-                    # -----------------------------
-                    # صورة مصغرة في الإشعار
-                    # -----------------------------
+
                     img_html = ""
                     if image_url:
                         img_html = f"""
@@ -303,6 +374,7 @@ while True:
                             <img src="{html.escape(image_url)}" style="width:80px; height:auto; border-radius:6px;">
                         </div>
                         """
+
                     notify_html = f"""
                     <div style='padding:10px; border-left:5px solid #007bff; margin-bottom:15px;
                                 background:white; border-radius:8px; direction:rtl; font-size:18px; overflow:hidden;'>
@@ -332,6 +404,7 @@ while True:
                         </div>
                     </div>
                     """
+
                     components.html(notify_html, height=120, scrolling=False)
 
             # -----------------------------
@@ -339,12 +412,15 @@ while True:
             # -----------------------------
             st.subheader("📦 أسعار المنتجات والمنافسين")
             colors = ["#007bff", "#ff8800", "#ff4444", "#28a745", "#6f42c1"]
+
             for idx, row in df.iterrows():
                 sku_main = row.get("SKU1", "")
                 if not sku_main:
                     continue
+
                 product_name = row.get("ProductName", "")
                 image_url = row.get("Image url", "").strip()
+
                 def ch_html(sku):
                     if not sku or str(sku).strip() == "":
                         return "<span style='color:#777;'>لا يوجد SKU للمنافس</span>"
@@ -371,6 +447,7 @@ while True:
                             <span style='font-size:16px; color:#444;'>📅 {time_}</span>
                         </span>
                     """
+
                 card = f"""
                 <div style="
                     border:1px solid #ddd;
@@ -382,15 +459,19 @@ while True:
                     width:70%;
                 ">
                 """
+
                 if product_name:
                     card += f"<h2>🔵 {html.escape(product_name)} — SKU الأساسي: <span style='color:#007bff'>{sku_to_link_html(sku_main)}</span></h2>"
                 else:
                     card += f"<h2>🔵 SKU الأساسي: <span style='color:#007bff'>{sku_to_link_html(sku_main)}</span></h2>"
+
                 main_price = row.get("Price1","")
                 main_nudge_html = format_nudge_html(row.get("Nudge1",""))
+
                 img_html_card = ""
                 if image_url:
                     img_html_card = f'<img src="{html.escape(image_url)}" style="max-width:150px; height:auto; border-radius:8px; margin-bottom:10px;">'
+
                 card += f"""
                     {img_html_card}
                     <b style='font-size:24px;'>💰 سعر منتجك:</b><br>
@@ -399,6 +480,7 @@ while True:
                     <br><span style='color:#666;'>لا يوجد تغيير لمنتجك</span>
                     <hr>
                 """
+
                 competitors = [
                     ("منافس1", row.get("SKU2",""), row.get("Price2",""), row.get("Nudge2",""), colors[0]),
                     ("منافس2", row.get("SKU3",""), row.get("Price3",""), row.get("Nudge3",""), colors[1]),
@@ -406,12 +488,15 @@ while True:
                     ("منافس4", row.get("SKU5",""), row.get("Price5",""), row.get("Nudge5",""), colors[3]),
                     ("منافس5", row.get("SKU6",""), row.get("Price6",""), row.get("Nudge6",""), colors[4]),
                 ]
+
                 for cname, skuX, priceX, nudgeX, colorX in competitors:
                     if not skuX or str(skuX).strip() == "":
                         continue
+
                     sku_clean = clean_sku_text(skuX)
                     ch_html_block = ch_html(sku_clean)
                     nudge_html_block = format_nudge_html(nudgeX)
+
                     card += f"""
                     <div style="
                         border:1px solid #ccc;
@@ -431,6 +516,7 @@ while True:
                         </div>
                     </div>
                     """
+
                 card += "</div>"
                 components.html(card, height=900, scrolling=True)
 
