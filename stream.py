@@ -19,7 +19,7 @@ st.set_page_config(page_title="Noon Prices – Dashboard", layout="wide")
 st.title("📊 Noon Prices – Live Monitoring Dashboard")
 
 # ----------------------------------------------
-# 📱 دعم كامل للجوال (CSS)
+# 📱 CSS دعم كامل للجوال + إصلاح الإشعارات
 # ----------------------------------------------
 st.markdown("""
 <style>
@@ -27,32 +27,32 @@ st.markdown("""
 /* ---------  العرض العام للجوال  ---------- */
 @media (max-width: 768px) {
 
-    /* تصغير الكروت */
+    /* الكروت الرئيسية للمنتج */
     div[style*="border:1px solid #ddd"] {
         width: 100% !important;
         padding: 12px !important;
         margin: 10px 0 !important;
     }
 
-    /* تصغير بوكس المنافسين */
+    /* كروت المنافسين */
     div[style*="background:#fafafa"] {
         padding: 10px !important;
         margin: 8px 0 !important;
     }
 
-    /* الصورة داخل البطاقة */
+    /* صورة المنتج داخل الكرت */
     img {
         max-width: 100% !important;
         height: auto !important;
     }
 
-    /* العناوين */
+    /* عناوين المنتجات */
     h2, h3 {
         font-size: 18px !important;
         line-height: 1.4 !important;
     }
 
-    /* سعر منتجك */
+    /* السعر الأساسي */
     span[style*="font-size:36px"] {
         font-size: 26px !important;
     }
@@ -62,28 +62,52 @@ st.markdown("""
         font-size: 20px !important;
     }
 
-    /* نودج 🔥 🟨 */
+    /* النودجات 🔥🟨 */
     div[style*="background:#fff3cd"],
     div[style*="background:#ffcc80"]{
         font-size: 14px !important;
         padding: 4px 6px !important;
     }
 
-    /* إشعارات آخر التغيرات */
+    /* ===== إصلاح Notifications بالكامل ===== */
+
+    /* الصندوق الأساسي */
     div[style*="border-left:5px solid"] {
-        font-size: 14px !important;
-        padding: 10px !important;
+        display: block !important;
+        width: 100% !important;
     }
 
-    /* iframe الخاص بـ components.html */
+    /* أي child داخله يصبح عمودي */
+    div[style*="border-left:5px solid"] * {
+        float: none !important;
+        display: block !important;
+    }
+
+    /* صورة SKU داخل الإشعار */
+    div[style*="border-left:5px solid"] img {
+        width: 110px !important;
+        height: auto !important;
+        margin: 0 auto 10px auto !important;
+    }
+
+    /* مساحات داخلية للإشعار */
+    div[style*="border-left:5px solid"] > div {
+        margin: 0 !important;
+    }
+
+    /* أسعار داخل الإشعار */
+    div[style*="font-size:20px"] {
+        text-align: center !important;
+    }
+
+    /* iframe الخاص components.html */
     iframe {
         height: auto !important;
-        min-height: 150px !important;
+        min-height: 160px !important;
     }
 }
 </style>
 """, unsafe_allow_html=True)
-
 # السماح بالصوت بعد أول ضغطة
 st.markdown("""
 <script>
@@ -205,7 +229,6 @@ def price_to_float(s):
         return float(cleaned)
     except:
         return None
-
 # -------------------------------------------------
 # الحصول على آخر تغيير
 # -------------------------------------------------
@@ -327,7 +350,6 @@ while True:
                     product_name = ""
                     nudge_html = ""
                     image_url = ""
-
                     try:
                         sku_clean_search = clean_sku_text(str(r["SKU"]))
                         match = df[df.apply(lambda row: sku_clean_search in [
